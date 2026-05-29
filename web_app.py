@@ -2,6 +2,7 @@
 """
 DSI 料號生成工具 - 網頁版
 """
+import os
 import sys
 import json
 import queue
