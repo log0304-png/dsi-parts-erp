@@ -1,0 +1,418 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>DSI 料號生成工具 | Part Number Generator</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background: #0a1628;
+      color: #e0eaff;
+      font-family: 'Segoe UI', Arial, sans-serif;
+      min-height: 100vh;
+    }
+
+    /* ── Header ── */
+    header {
+      background: #0d1e3a;
+      border-bottom: 2px solid #1a4080;
+      padding: 14px 32px;
+      display: flex;
+      align-items: center;
+      gap: 18px;
+    }
+    header img { height: 44px; }
+    header .title {
+      font-size: 1.25rem;
+      font-weight: 600;
+      color: #ffffff;
+      letter-spacing: 0.5px;
+    }
+    header .title span {
+      color: #5ab4ff;
+      font-size: 0.95rem;
+      font-weight: 400;
+      margin-left: 10px;
+    }
+
+    /* ── Main ── */
+    main {
+      max-width: 960px;
+      margin: 32px auto;
+      padding: 0 24px;
+    }
+
+    .card {
+      background: #0f2040;
+      border: 1px solid #1e3f6e;
+      border-radius: 8px;
+      padding: 24px;
+      margin-bottom: 20px;
+    }
+
+    .card-title {
+      font-size: 0.8rem;
+      color: #5ab4ff;
+      letter-spacing: 1.5px;
+      text-transform: uppercase;
+      margin-bottom: 16px;
+      padding-bottom: 8px;
+      border-bottom: 1px solid #1e3f6e;
+    }
+
+    /* ── Upload Area ── */
+    #drop-zone {
+      border: 2px dashed #1e5a9e;
+      border-radius: 8px;
+      padding: 40px;
+      text-align: center;
+      cursor: pointer;
+      transition: all 0.2s;
+      background: #0a1e3a;
+    }
+    #drop-zone:hover, #drop-zone.drag-over {
+      border-color: #5ab4ff;
+      background: #0d2650;
+    }
+    #drop-zone .icon {
+      font-size: 2.5rem;
+      margin-bottom: 12px;
+      opacity: 0.7;
+    }
+    #drop-zone p { color: #90b8e0; margin-bottom: 12px; }
+    #drop-zone input { display: none; }
+
+    /* ── File List ── */
+    #file-list { margin-top: 14px; }
+    .file-item {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 8px 12px;
+      background: #0a1e3a;
+      border: 1px solid #1e3f6e;
+      border-radius: 4px;
+      margin-bottom: 6px;
+      font-size: 0.9rem;
+    }
+    .file-item .file-icon { color: #5ab4ff; }
+    .file-item .file-name { flex: 1; }
+    .file-item .file-size { color: #607d9e; font-size: 0.8rem; }
+
+    /* ── Buttons ── */
+    .btn-row { display: flex; gap: 12px; margin-top: 18px; }
+    button {
+      padding: 10px 24px;
+      border: none;
+      border-radius: 5px;
+      font-size: 0.95rem;
+      cursor: pointer;
+      font-weight: 600;
+      transition: all 0.2s;
+    }
+    .btn-primary {
+      background: #1565c0;
+      color: #fff;
+    }
+    .btn-primary:hover { background: #1976d2; }
+    .btn-primary:disabled { background: #1a3a5c; color: #607d9e; cursor: not-allowed; }
+    .btn-secondary {
+      background: #1a3a5c;
+      color: #90b8e0;
+    }
+    .btn-secondary:hover { background: #1e4470; }
+
+    /* ── Log ── */
+    #log-area {
+      background: #060e1c;
+      border: 1px solid #1a3a5c;
+      border-radius: 6px;
+      padding: 14px;
+      height: 200px;
+      overflow-y: auto;
+      font-family: 'Consolas', monospace;
+      font-size: 0.82rem;
+      line-height: 1.7;
+    }
+    .log-info    { color: #90b8e0; }
+    .log-success { color: #4caf50; }
+    .log-warning { color: #ffb74d; }
+    .log-error   { color: #ef5350; }
+    .log-line::before { content: "▶  "; opacity: 0.5; }
+
+    /* ── Results Table ── */
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.88rem;
+    }
+    th {
+      background: #0d2650;
+      color: #5ab4ff;
+      padding: 10px 14px;
+      text-align: left;
+      font-weight: 600;
+      letter-spacing: 0.5px;
+      border-bottom: 2px solid #1e3f6e;
+    }
+    td {
+      padding: 9px 14px;
+      border-bottom: 1px solid #112040;
+      color: #c8daf0;
+    }
+    tr:hover td { background: #0d2040; }
+    .badge {
+      display: inline-block;
+      padding: 2px 10px;
+      border-radius: 20px;
+      font-size: 0.78rem;
+      font-weight: 600;
+    }
+    .badge-created   { background: #1b5e20; color: #69f0ae; }
+    .badge-duplicate { background: #e65100; color: #ffe0b2; }
+    .badge-conflict  { background: #4a148c; color: #e1bee7; }
+    .badge-error     { background: #b71c1c; color: #ffcdd2; }
+
+    .part-number { color: #5ab4ff; font-family: 'Consolas', monospace; font-weight: 600; }
+
+    /* ── Progress Bar ── */
+    #progress-bar-wrap {
+      height: 4px;
+      background: #1a3a5c;
+      border-radius: 2px;
+      margin-top: 16px;
+      display: none;
+    }
+    #progress-bar {
+      height: 100%;
+      background: linear-gradient(90deg, #1565c0, #42a5f5);
+      border-radius: 2px;
+      transition: width 0.3s;
+      width: 0%;
+    }
+
+    /* ── Sheet Link ── */
+    .sheet-link {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      color: #5ab4ff;
+      text-decoration: none;
+      font-size: 0.88rem;
+      margin-top: 10px;
+    }
+    .sheet-link:hover { text-decoration: underline; }
+
+    #empty-hint {
+      color: #607d9e;
+      text-align: center;
+      padding: 24px;
+      font-size: 0.88rem;
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <img src="/static/logo.png" alt="DSI" onerror="this.style.display='none'">
+  <div class="title">
+    DSI 料號生成工具
+    <span>| Part Number Generator</span>
+  </div>
+</header>
+
+<main>
+
+  <!-- 上傳區塊 -->
+  <div class="card">
+    <div class="card-title">上傳工程圖 PDF</div>
+    <div id="drop-zone" onclick="document.getElementById('file-input').click()">
+      <div class="icon">📄</div>
+      <p>拖曳 PDF 至此，或點擊選擇檔案</p>
+      <button type="button" class="btn-secondary" style="pointer-events:none">選擇檔案</button>
+      <input type="file" id="file-input" accept=".pdf" multiple>
+    </div>
+    <div id="file-list"></div>
+    <div id="progress-bar-wrap"><div id="progress-bar"></div></div>
+    <div class="btn-row">
+      <button class="btn-primary" id="btn-start" disabled onclick="startProcess()">
+        ⚡ 自動分析並產生料號
+      </button>
+      <button class="btn-secondary" onclick="clearAll()">↺ 清除</button>
+    </div>
+  </div>
+
+  <!-- 處理記錄 -->
+  <div class="card">
+    <div class="card-title">處理記錄</div>
+    <div id="log-area"><span class="log-info log-line">系統就緒，請上傳 PDF 開始處理。</span></div>
+  </div>
+
+  <!-- 結果 -->
+  <div class="card">
+    <div class="card-title">產生結果</div>
+    <div id="empty-hint">尚無結果</div>
+    <table id="result-table" style="display:none">
+      <thead>
+        <tr>
+          <th>檔案名稱</th>
+          <th>料號</th>
+          <th>分類</th>
+          <th>Drawing</th>
+          <th>Material</th>
+          <th>Rev</th>
+          <th>狀態</th>
+          <th>下載</th>
+        </tr>
+      </thead>
+      <tbody id="result-body"></tbody>
+    </table>
+    <a class="sheet-link" href="{{ sheet_url }}" target="_blank" id="sheet-link" style="display:none">
+      📊 在 Google Sheets 查看完整 ERP 資料庫
+    </a>
+  </div>
+
+</main>
+
+<script>
+  let selectedFiles = [];
+
+  // ── 拖曳上傳 ──
+  const dropZone = document.getElementById('drop-zone');
+  dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('drag-over'); });
+  dropZone.addEventListener('dragleave', () => dropZone.classList.remove('drag-over'));
+  dropZone.addEventListener('drop', e => {
+    e.preventDefault();
+    dropZone.classList.remove('drag-over');
+    addFiles([...e.dataTransfer.files]);
+  });
+  document.getElementById('file-input').addEventListener('change', e => {
+    addFiles([...e.target.files]);
+    e.target.value = '';
+  });
+
+  function addFiles(files) {
+    const pdfs = files.filter(f => f.name.toLowerCase().endsWith('.pdf'));
+    pdfs.forEach(f => {
+      if (!selectedFiles.find(x => x.name === f.name)) selectedFiles.push(f);
+    });
+    renderFileList();
+  }
+
+  function renderFileList() {
+    const list = document.getElementById('file-list');
+    list.innerHTML = selectedFiles.map((f, i) => `
+      <div class="file-item">
+        <span class="file-icon">📄</span>
+        <span class="file-name">${f.name}</span>
+        <span class="file-size">${(f.size / 1024).toFixed(1)} KB</span>
+        <span style="cursor:pointer;color:#ef5350" onclick="removeFile(${i})">✕</span>
+      </div>`).join('');
+    document.getElementById('btn-start').disabled = selectedFiles.length === 0;
+  }
+
+  function removeFile(i) {
+    selectedFiles.splice(i, 1);
+    renderFileList();
+  }
+
+  function clearAll() {
+    selectedFiles = [];
+    renderFileList();
+    document.getElementById('log-area').innerHTML =
+      '<span class="log-info log-line">系統就緒，請上傳 PDF 開始處理。</span>';
+    document.getElementById('result-body').innerHTML = '';
+    document.getElementById('result-table').style.display = 'none';
+    document.getElementById('empty-hint').style.display = 'block';
+    document.getElementById('sheet-link').style.display = 'none';
+    document.getElementById('progress-bar-wrap').style.display = 'none';
+    document.getElementById('progress-bar').style.width = '0%';
+  }
+
+  // ── 開始處理 ──
+  async function startProcess() {
+    if (selectedFiles.length === 0) return;
+
+    document.getElementById('btn-start').disabled = true;
+    document.getElementById('progress-bar-wrap').style.display = 'block';
+    document.getElementById('progress-bar').style.width = '10%';
+
+    const formData = new FormData();
+    selectedFiles.forEach(f => formData.append('pdfs', f));
+
+    const res  = await fetch('/upload', { method: 'POST', body: formData });
+    const json = await res.json();
+    if (json.error) { appendLog(json.error, 'error'); return; }
+
+    listenStream(json.task_id, selectedFiles.length);
+  }
+
+  function listenStream(taskId, total) {
+    const src = new EventSource(`/stream/${taskId}`);
+    let done   = 0;
+
+    src.onmessage = e => {
+      const msg = JSON.parse(e.data);
+
+      if (msg.type === 'log') {
+        appendLog(msg.msg, msg.status);
+      }
+      if (msg.type === 'result') {
+        addResult(msg.data);
+        done++;
+        document.getElementById('progress-bar').style.width =
+          Math.round(10 + done / total * 90) + '%';
+      }
+      if (msg.type === 'done') {
+        src.close();
+        document.getElementById('progress-bar').style.width = '100%';
+        document.getElementById('btn-start').disabled = false;
+        document.getElementById('sheet-link').style.display = 'inline-flex';
+        selectedFiles = [];
+        renderFileList();
+      }
+    };
+  }
+
+  function appendLog(msg, status = 'info') {
+    const area = document.getElementById('log-area');
+    const span = document.createElement('span');
+    span.className = `log-${status} log-line`;
+    span.textContent = msg;
+    area.appendChild(document.createElement('br'));
+    area.appendChild(span);
+    area.scrollTop = area.scrollHeight;
+  }
+
+  const STATUS_LABELS = {
+    created:   ['badge-created',   '✓ 建立'],
+    duplicate: ['badge-duplicate', '⚠ 重複'],
+    conflict:  ['badge-conflict',  '⚠ 衝突'],
+    error:     ['badge-error',     '✕ 錯誤'],
+  };
+
+  function addResult(data) {
+    document.getElementById('empty-hint').style.display = 'none';
+    document.getElementById('result-table').style.display = 'table';
+    const [cls, label] = STATUS_LABELS[data.status] || ['badge-error', data.status];
+    const tr = document.createElement('tr');
+    const dlBtn = data.download
+      ? `<a href="/download/${data.download}" style="color:#5ab4ff;font-size:0.85rem">⬇ 下載</a>`
+      : '-';
+    tr.innerHTML = `
+      <td>${data.file}</td>
+      <td class="part-number">${data.part_number}</td>
+      <td>${data.category}</td>
+      <td>${data.drawing}</td>
+      <td>${data.material}</td>
+      <td>${data.revision}</td>
+      <td><span class="badge ${cls}">${label}</span></td>
+      <td>${dlBtn}</td>`;
+    document.getElementById('result-body').appendChild(tr);
+  }
+</script>
+
+</body>
+</html>

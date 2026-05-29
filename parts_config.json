@@ -1,0 +1,12 @@
+{
+  "google": {
+    "credentials_file": "credentials.json",
+    "spreadsheet_name": "AI_PARTS_ERP"
+  },
+  "pdf_folder": "%USERPROFILE%\\OneDrive\\公司文件\\PartNumber_PDF",
+  "gemini_model": "gemini-3.1-flash-lite",
+  "gemini_api_key": "AIzaSyBJj3Cj8D8W98DQu8giSqSoFMmMACVH4f8",
+  "sheet_id": "1nUZK5hQk5RvKoX7OaKmff4d7utThOwZQaLxExGZ4aZE",
+  "line_erp_token": "XNHgKOy4Lhq+vazHtrFsCsx4OxZGWtejKUxarl0+lpoql3nOEHKtVTjmKHFqim6cOg6pCaa4ePKse4/KkWmDFxDONGDYzzzEmF7s9Maxyt75PWot7WpLKCDh7xZlRfuysyK0hE06EfI4z/ZeITYh0QdB04t89/1O/w1cDnyilFU=",
+  "line_erp_target": "U56641023c82b24e250380e185881ae57"
+}

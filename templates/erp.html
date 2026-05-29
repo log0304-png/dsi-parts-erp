@@ -1,0 +1,540 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>DSI 機構料號 ERP</title>
+<style>
+:root {
+  --bg:       #0D1B34;
+  --hdr:      #07102A;
+  --sidebar:  #091628;
+  --blue:     #0078C8;
+  --bluedark: #005AA0;
+  --bluelight:#1A90D8;
+  --input:    #142846;
+  --panel:    #0F2040;
+  --card:     #112040;
+  --white:    #FFFFFF;
+  --gray:     #8CB4D2;
+  --lightgray:#B0C8DC;
+  --green:    #64DC82;
+  --greenbg:  rgba(100,220,130,0.12);
+  --red:      #FF6E64;
+  --redbg:    rgba(255,110,100,0.12);
+  --yellow:   #FFB400;
+  --yellowbg: rgba(255,180,0,0.12);
+  --purple:   #A855F7;
+  --teal:     #2DD4BF;
+  --border:   #1A3A60;
+  --border2:  #0F2A50;
+  --rowalt:   rgba(255,255,255,0.02);
+  --rowhover: rgba(0,120,200,0.08);
+}
+* { box-sizing:border-box; margin:0; padding:0; }
+body { background:var(--bg); color:var(--white); font-family:"Microsoft JhengHei","微軟正黑體",Arial,sans-serif; font-size:13px; height:100vh; overflow:hidden; }
+
+/* ── Layout ── */
+.app { display:flex; height:100vh; }
+
+/* ── Sidebar ── */
+.sidebar { width:220px; min-width:220px; background:var(--sidebar); border-right:1px solid var(--border2); display:flex; flex-direction:column; overflow:hidden; }
+.sidebar-brand { padding:16px 16px 13px; display:flex; align-items:center; gap:10px; border-bottom:1px solid var(--border2); }
+.brand-logo { background:var(--blue); color:#fff; font-size:13px; font-weight:800; padding:5px 8px; border-radius:4px; min-width:42px; text-align:center; }
+.brand-name { font-size:13px; font-weight:700; }
+.brand-sub  { font-size:9px; color:var(--gray); margin-top:2px; }
+
+.sidebar-nav { flex:1; padding:6px 0; overflow-y:auto; }
+.nav-label { font-size:9px; color:var(--gray); letter-spacing:0.8px; padding:10px 14px 3px; opacity:0.55; text-transform:uppercase; }
+.nav-item { display:flex; align-items:center; gap:9px; padding:9px 14px; color:var(--gray); cursor:pointer; transition:all .15s; border-left:3px solid transparent; font-size:12px; }
+.nav-item:hover { background:rgba(0,120,200,0.08); color:var(--white); }
+.nav-item.active { background:rgba(0,120,200,0.15); color:var(--blue); border-left-color:var(--blue); font-weight:600; }
+.nav-icon { font-size:14px; width:18px; text-align:center; flex-shrink:0; }
+.nav-divider { height:1px; background:var(--border2); margin:4px 0; }
+.nav-ext { display:flex; align-items:center; gap:9px; padding:9px 14px; color:var(--gray); font-size:12px; text-decoration:none; transition:all .15s; border-left:3px solid transparent; }
+.nav-ext:hover { background:rgba(0,120,200,0.08); color:var(--white); }
+
+.sidebar-footer { padding:10px 16px; border-top:1px solid var(--border2); font-size:10px; color:var(--gray); }
+.db-status { display:flex; align-items:center; gap:6px; margin-bottom:3px; }
+.status-dot { width:7px; height:7px; border-radius:50%; background:var(--green); animation:pulse 2s infinite; }
+@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.35} }
+
+/* ── Main ── */
+.main { flex:1; display:flex; flex-direction:column; overflow:hidden; }
+.topbar { background:var(--hdr); border-bottom:1px solid var(--border2); padding:0 24px; height:52px; display:flex; align-items:center; gap:16px; flex-shrink:0; }
+.topbar-title { font-size:14px; font-weight:600; }
+.topbar-right { display:flex; align-items:center; gap:12px; margin-left:auto; }
+.topbar-date { font-size:11px; color:var(--gray); }
+.content { flex:1; overflow-y:auto; padding:24px; }
+
+/* ── Pages ── */
+.page { display:none; }
+.page.active { display:block; }
+
+/* ── Stat Cards ── */
+.stats-grid { display:grid; grid-template-columns:repeat(4,1fr); gap:14px; margin-bottom:22px; }
+.stat-card { background:var(--card); border:1px solid var(--border); border-radius:6px; padding:16px 18px; position:relative; overflow:hidden; }
+.stat-card::before { content:''; position:absolute; top:0; left:0; width:3px; height:100%; background:var(--blue); }
+.stat-card.green::before  { background:var(--green); }
+.stat-card.yellow::before { background:var(--yellow); }
+.stat-card.purple::before { background:var(--purple); }
+.stat-card.teal::before   { background:var(--teal); }
+.stat-label { font-size:11px; color:var(--gray); margin-bottom:6px; }
+.stat-value { font-size:26px; font-weight:700; line-height:1; margin-bottom:3px; }
+.stat-sub   { font-size:10px; color:var(--gray); }
+.stat-icon  { position:absolute; top:13px; right:14px; font-size:24px; opacity:0.13; }
+
+/* ── Section ── */
+.section-hdr { display:flex; align-items:center; justify-content:space-between; margin-bottom:12px; }
+.section-title { font-size:13px; font-weight:600; color:var(--lightgray); }
+.section-sub   { font-size:11px; color:var(--gray); margin-top:2px; }
+
+/* ── Table ── */
+.tbl-wrap { background:var(--card); border:1px solid var(--border); border-radius:6px; overflow:hidden; margin-bottom:22px; }
+table { width:100%; border-collapse:collapse; }
+thead { background:var(--panel); }
+th { text-align:left; padding:9px 14px; font-size:10px; color:var(--gray); font-weight:600; letter-spacing:0.5px; text-transform:uppercase; border-bottom:1px solid var(--border); white-space:nowrap; }
+td { padding:9px 14px; font-size:12px; border-bottom:1px solid var(--border2); vertical-align:middle; }
+tr:last-child td { border-bottom:none; }
+tr:nth-child(even)>td { background:var(--rowalt); }
+tr:hover>td { background:var(--rowhover); }
+.mono { font-family:Consolas,monospace; font-size:11px; }
+
+/* ── Badges ── */
+.badge { display:inline-block; padding:2px 8px; border-radius:3px; font-size:10px; font-weight:700; }
+.cat-M   { background:rgba(100,180,255,.15); color:#88C4FF; }
+.cat-E   { background:rgba(200,100,255,.15); color:#D488FF; }
+.cat-S   { background:rgba(100,220,180,.15); color:#66DDBB; }
+.cat-other { background:rgba(255,255,255,.08); color:var(--gray); }
+
+/* ── Filter ── */
+.filter-row { display:flex; gap:10px; margin-bottom:14px; align-items:center; flex-wrap:wrap; }
+.search-box { background:var(--input); border:1px solid var(--border); color:var(--white); padding:7px 12px; border-radius:4px; font-size:12px; font-family:inherit; width:240px; outline:none; transition:border-color .15s; }
+.search-box:focus { border-color:var(--blue); }
+.search-box::placeholder { color:var(--gray); }
+select.filter-sel { background:var(--input); border:1px solid var(--border); color:var(--white); padding:7px 10px; border-radius:4px; font-size:12px; font-family:inherit; outline:none; cursor:pointer; }
+select.filter-sel option { background:var(--panel); }
+
+/* ── Btn ── */
+.btn { background:var(--blue); color:#fff; border:none; padding:7px 14px; border-radius:4px; font-size:12px; font-family:inherit; cursor:pointer; transition:background .15s; white-space:nowrap; }
+.btn:hover { background:var(--bluedark); }
+.btn-sm { padding:4px 10px; font-size:11px; }
+.btn-ghost { background:transparent; border:1px solid var(--border); color:var(--gray); }
+.btn-ghost:hover { border-color:var(--blue); color:var(--blue); }
+
+/* ── Loading ── */
+.loading { text-align:center; padding:48px; color:var(--gray); font-size:12px; }
+.spinner { display:inline-block; width:28px; height:28px; border:3px solid var(--border); border-top-color:var(--blue); border-radius:50%; animation:spin .7s linear infinite; margin-bottom:12px; }
+@keyframes spin { to { transform:rotate(360deg); } }
+
+/* ── Empty ── */
+.empty-row td { text-align:center; color:var(--gray); padding:32px !important; }
+
+/* ── Pager ── */
+.pager { display:flex; align-items:center; gap:8px; padding:10px 16px; border-top:1px solid var(--border2); font-size:11px; color:var(--gray); }
+.pager .pager-info { flex:1; }
+.pager button { background:var(--input); border:1px solid var(--border); color:var(--lightgray); padding:3px 10px; border-radius:3px; cursor:pointer; font-size:11px; }
+.pager button:hover:not(:disabled) { border-color:var(--blue); color:var(--blue); }
+.pager button:disabled { opacity:0.35; cursor:default; }
+</style>
+</head>
+<body>
+<div class="app">
+
+<!-- ══ Sidebar ══════════════════════════════════ -->
+<aside class="sidebar">
+  <div class="sidebar-brand">
+    <div class="brand-logo">DSI</div>
+    <div>
+      <div class="brand-name">料號 ERP</div>
+      <div class="brand-sub">Part Number System</div>
+    </div>
+  </div>
+
+  <nav class="sidebar-nav">
+    <div class="nav-label">主選單</div>
+    <div class="nav-item active" data-page="dashboard" onclick="go('dashboard')">
+      <span class="nav-icon">⊞</span> 儀表板
+    </div>
+    <div class="nav-divider"></div>
+    <div class="nav-label">料號管理</div>
+    <div class="nav-item" data-page="parts" onclick="go('parts')">
+      <span class="nav-icon">🔩</span> 料號資料庫
+    </div>
+    <div class="nav-item" data-page="fps" onclick="go('fps')">
+      <span class="nav-icon">◈</span> 圖面特徵庫
+    </div>
+    <div class="nav-divider"></div>
+    <div class="nav-label">工具</div>
+    <a class="nav-ext" href="/" target="_blank">
+      <span class="nav-icon">➕</span> PDF 料號產生
+    </a>
+  </nav>
+
+  <div class="sidebar-footer">
+    <div class="db-status"><span class="status-dot"></span><span>Google Sheets 連線中</span></div>
+    <div style="opacity:.45">DSI ERP v1.0 · 機構料號系統</div>
+  </div>
+</aside>
+
+<!-- ══ Main ══════════════════════════════════ -->
+<main class="main">
+  <div class="topbar">
+    <div class="topbar-title" id="topbar-title">儀表板</div>
+    <div class="topbar-right">
+      <span class="topbar-date" id="topbar-date"></span>
+      <button class="btn btn-sm btn-ghost" onclick="refreshData()">↻ 重新整理</button>
+    </div>
+  </div>
+
+  <div class="content">
+    <!-- 儀表板 -->
+    <div class="page active" id="page-dashboard">
+      <div class="loading"><div class="spinner"></div><br>載入資料中...</div>
+    </div>
+
+    <!-- 料號資料庫 -->
+    <div class="page" id="page-parts">
+      <div class="section-hdr">
+        <div>
+          <div class="section-title">機構料號資料庫</div>
+          <div class="section-sub" id="parts-count">─</div>
+        </div>
+        <a href="/" target="_blank"><button class="btn btn-sm">➕ 新增料號</button></a>
+      </div>
+      <div class="filter-row">
+        <input class="search-box" id="parts-search" placeholder="搜尋料號 / 圖面 / 專案 / 材質..." oninput="filterParts()">
+        <select class="filter-sel" id="parts-cat" onchange="filterParts()">
+          <option value="">全部分類</option>
+        </select>
+        <select class="filter-sel" id="parts-proj" onchange="filterParts()">
+          <option value="">全部專案</option>
+        </select>
+      </div>
+      <div class="tbl-wrap">
+        <table>
+          <thead><tr>
+            <th>料號</th><th>分類</th><th>專案</th><th>圖面</th>
+            <th>材質</th><th>版次</th><th>設計者</th><th>圖號</th><th>建立時間</th>
+          </tr></thead>
+          <tbody id="parts-tbody"><tr class="loading-row"><td colspan="9" style="text-align:center;padding:32px;color:var(--gray)">載入中...</td></tr></tbody>
+        </table>
+        <div class="pager">
+          <span class="pager-info" id="parts-pager-info"></span>
+          <button id="parts-prev" onclick="partsPrev()">◀ 上一頁</button>
+          <button id="parts-next" onclick="partsNext()">下一頁 ▶</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 圖面特徵庫 -->
+    <div class="page" id="page-fps">
+      <div class="section-hdr">
+        <div>
+          <div class="section-title">圖面特徵庫</div>
+          <div class="section-sub" id="fps-count">─</div>
+        </div>
+      </div>
+      <div class="filter-row">
+        <input class="search-box" id="fps-search" placeholder="搜尋料號 / 圖面 / 材質..." oninput="filterFps()">
+      </div>
+      <div class="tbl-wrap">
+        <table>
+          <thead><tr>
+            <th>料號</th><th>圖面</th><th>材質</th><th>版次</th><th>圖號</th><th>建立時間</th>
+          </tr></thead>
+          <tbody id="fps-tbody"><tr><td colspan="6" style="text-align:center;padding:32px;color:var(--gray)">載入中...</td></tr></tbody>
+        </table>
+        <div class="pager">
+          <span class="pager-info" id="fps-pager-info"></span>
+          <button id="fps-prev" onclick="fpsPrev()">◀ 上一頁</button>
+          <button id="fps-next" onclick="fpsNext()">下一頁 ▶</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</main>
+</div>
+
+<script>
+// ═══════════════════════════════════════════
+//  State
+// ═══════════════════════════════════════════
+let allParts = [];
+let allFps   = [];
+let filteredParts = [];
+let filteredFps   = [];
+const PAGE_SIZE = 30;
+let partsPage = 1;
+let fpsPage   = 1;
+let currentPage = 'dashboard';
+
+// ═══════════════════════════════════════════
+//  Navigation
+// ═══════════════════════════════════════════
+const TITLES = { dashboard:'儀表板', parts:'機構料號資料庫', fps:'圖面特徵庫' };
+
+function go(page) {
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.getElementById('page-' + page).classList.add('active');
+  document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+  const el = document.querySelector(`[data-page="${page}"]`);
+  if (el) el.classList.add('active');
+  document.getElementById('topbar-title').textContent = TITLES[page] || page;
+  currentPage = page;
+}
+
+// ═══════════════════════════════════════════
+//  Data Loading
+// ═══════════════════════════════════════════
+async function loadData() {
+  try {
+    const [pRes, fRes] = await Promise.all([
+      fetch('/api/parts'),
+      fetch('/api/fps'),
+    ]);
+    const pJson = await pRes.json();
+    const fJson = await fRes.json();
+
+    if (pJson.ok) {
+      allParts = pJson.data;
+      filteredParts = [...allParts];
+      populateCatFilter();
+      populateProjFilter();
+    }
+    if (fJson.ok) {
+      allFps = fJson.data;
+      filteredFps = [...allFps];
+    }
+
+    renderDashboard();
+    renderParts();
+    renderFps();
+  } catch(e) {
+    document.getElementById('page-dashboard').innerHTML =
+      `<div style="color:var(--red);padding:32px">載入失敗：${e.message}</div>`;
+  }
+}
+
+function refreshData() {
+  allParts = []; allFps = [];
+  document.getElementById('page-dashboard').innerHTML =
+    '<div class="loading"><div class="spinner"></div><br>載入資料中...</div>';
+  loadData();
+}
+
+// ═══════════════════════════════════════════
+//  Dashboard
+// ═══════════════════════════════════════════
+function renderDashboard() {
+  const total  = allParts.length;
+  const cats   = [...new Set(allParts.map(p => p.category).filter(Boolean))];
+  const projs  = [...new Set(allParts.map(p => p.project).filter(Boolean))];
+  const fps    = allFps.length;
+
+  const now    = new Date();
+  const cutoff = new Date(now - 7*24*3600*1000).toISOString().slice(0,10);
+  const recent = allParts.filter(p => (p.created||'') >= cutoff);
+
+  // Category breakdown
+  const catMap = {};
+  allParts.forEach(p => { catMap[p.category||'其他'] = (catMap[p.category||'其他']||0)+1; });
+  const catRows = Object.entries(catMap).sort((a,b)=>b[1]-a[1])
+    .map(([cat,cnt]) => {
+      const cls = cat.startsWith('M')?'cat-M':cat.startsWith('E')?'cat-E':cat.startsWith('S')?'cat-S':'cat-other';
+      const pct = Math.round(cnt/total*100);
+      return `<tr>
+        <td><span class="badge ${cls}">${cat||'─'}</span></td>
+        <td style="color:var(--white)">${cnt}</td>
+        <td>
+          <div style="display:flex;align-items:center;gap:8px">
+            <div style="background:var(--border);border-radius:2px;height:4px;width:100px;overflow:hidden">
+              <div style="height:100%;background:var(--blue);width:${pct}%"></div>
+            </div>
+            <span style="font-size:10px;color:var(--gray)">${pct}%</span>
+          </div>
+        </td>
+      </tr>`;
+    }).join('');
+
+  // Recent 10
+  const recentRows = [...allParts].reverse().slice(0,10).map(p => {
+    const cls = (p.category||'').startsWith('M')?'cat-M':(p.category||'').startsWith('E')?'cat-E':'cat-other';
+    return `<tr>
+      <td class="mono" style="color:var(--bluelight);cursor:pointer" onclick="go('parts')">${p.part_number||'─'}</td>
+      <td><span class="badge ${cls}">${p.category||'─'}</span></td>
+      <td>${p.project||'─'}</td>
+      <td>${p.drawing||'─'}</td>
+      <td>${p.material||'─'}</td>
+      <td style="color:var(--gray)">${(p.created||'').slice(0,10)}</td>
+    </tr>`;
+  }).join('') || '<tr><td colspan="6" style="text-align:center;color:var(--gray);padding:24px">尚無料號資料</td></tr>';
+
+  document.getElementById('page-dashboard').innerHTML = `
+    <div class="stats-grid">
+      <div class="stat-card">
+        <div class="stat-icon">🔩</div>
+        <div class="stat-label">總料號數</div>
+        <div class="stat-value">${total}</div>
+        <div class="stat-sub">機構料號資料庫</div>
+      </div>
+      <div class="stat-card teal">
+        <div class="stat-icon">◈</div>
+        <div class="stat-label">圖面特徵數</div>
+        <div class="stat-value">${fps}</div>
+        <div class="stat-sub">圖面特徵庫</div>
+      </div>
+      <div class="stat-card purple">
+        <div class="stat-icon">📁</div>
+        <div class="stat-label">分類數</div>
+        <div class="stat-value">${cats.length}</div>
+        <div class="stat-sub">料號分類</div>
+      </div>
+      <div class="stat-card green">
+        <div class="stat-icon">📅</div>
+        <div class="stat-label">近7日新增</div>
+        <div class="stat-value">${recent.length}</div>
+        <div class="stat-sub">最近一週</div>
+      </div>
+    </div>
+
+    <div style="display:grid;grid-template-columns:1fr 1.8fr;gap:16px">
+      <div>
+        <div class="section-hdr"><div class="section-title">分類統計</div></div>
+        <div class="tbl-wrap">
+          <table>
+            <thead><tr><th>分類</th><th>數量</th><th>占比</th></tr></thead>
+            <tbody>${catRows||'<tr><td colspan="3" style="text-align:center;color:var(--gray)">─</td></tr>'}</tbody>
+          </table>
+        </div>
+      </div>
+      <div>
+        <div class="section-hdr">
+          <div class="section-title">最近新增料號</div>
+          <button class="btn btn-ghost btn-sm" onclick="go('parts')">查看全部</button>
+        </div>
+        <div class="tbl-wrap">
+          <table>
+            <thead><tr><th>料號</th><th>分類</th><th>專案</th><th>圖面</th><th>材質</th><th>建立</th></tr></thead>
+            <tbody>${recentRows}</tbody>
+          </table>
+        </div>
+      </div>
+    </div>`;
+}
+
+// ═══════════════════════════════════════════
+//  Parts Table
+// ═══════════════════════════════════════════
+function populateCatFilter() {
+  const cats = [...new Set(allParts.map(p => p.category).filter(Boolean))].sort();
+  const sel  = document.getElementById('parts-cat');
+  sel.innerHTML = '<option value="">全部分類</option>' +
+    cats.map(c => `<option value="${c}">${c}</option>`).join('');
+}
+
+function populateProjFilter() {
+  const projs = [...new Set(allParts.map(p => p.project).filter(Boolean))].sort();
+  const sel   = document.getElementById('parts-proj');
+  sel.innerHTML = '<option value="">全部專案</option>' +
+    projs.map(p => `<option value="${p}">${p}</option>`).join('');
+}
+
+function filterParts() {
+  const q    = document.getElementById('parts-search').value.toLowerCase();
+  const cat  = document.getElementById('parts-cat').value;
+  const proj = document.getElementById('parts-proj').value;
+  filteredParts = allParts.filter(p => {
+    const matchQ = !q || [p.part_number, p.drawing, p.project, p.material, p.designer, p.drawing_no]
+      .some(v => (v||'').toLowerCase().includes(q));
+    const matchC = !cat  || p.category === cat;
+    const matchP = !proj || p.project  === proj;
+    return matchQ && matchC && matchP;
+  });
+  partsPage = 1;
+  renderParts();
+}
+
+function renderParts() {
+  const start  = (partsPage-1)*PAGE_SIZE;
+  const end    = start + PAGE_SIZE;
+  const page   = filteredParts.slice(start, end);
+  const total  = filteredParts.length;
+  const pages  = Math.ceil(total/PAGE_SIZE)||1;
+
+  document.getElementById('parts-count').textContent = `共 ${total} 筆`;
+  document.getElementById('parts-pager-info').textContent =
+    `第 ${partsPage} / ${pages} 頁，共 ${total} 筆`;
+  document.getElementById('parts-prev').disabled = partsPage <= 1;
+  document.getElementById('parts-next').disabled = partsPage >= pages;
+
+  const rows = page.map(p => {
+    const cls = (p.category||'').startsWith('M')?'cat-M':(p.category||'').startsWith('E')?'cat-E':'cat-S';
+    return `<tr>
+      <td class="mono" style="color:var(--bluelight)">${p.part_number||'─'}</td>
+      <td><span class="badge ${cls}">${p.category||'─'}</span></td>
+      <td>${p.project||'─'}</td>
+      <td>${p.drawing||'─'}</td>
+      <td>${p.material||'─'}</td>
+      <td>${p.revision||'─'}</td>
+      <td>${p.designer||'─'}</td>
+      <td class="mono" style="color:var(--gray)">${p.drawing_no||'─'}</td>
+      <td style="color:var(--gray)">${(p.created||'').slice(0,10)}</td>
+    </tr>`;
+  }).join('') || '<tr class="empty-row"><td colspan="9">沒有符合條件的料號</td></tr>';
+
+  document.getElementById('parts-tbody').innerHTML = rows;
+}
+
+function partsPrev() { if(partsPage>1){ partsPage--; renderParts(); } }
+function partsNext() { if(partsPage*PAGE_SIZE<filteredParts.length){ partsPage++; renderParts(); } }
+
+// ═══════════════════════════════════════════
+//  Fingerprint Table
+// ═══════════════════════════════════════════
+function filterFps() {
+  const q = document.getElementById('fps-search').value.toLowerCase();
+  filteredFps = allFps.filter(p =>
+    !q || [p.part_number, p.drawing, p.material, p.drawing_no]
+      .some(v => (v||'').toLowerCase().includes(q))
+  );
+  fpsPage = 1;
+  renderFps();
+}
+
+function renderFps() {
+  const start = (fpsPage-1)*PAGE_SIZE;
+  const end   = start + PAGE_SIZE;
+  const page  = filteredFps.slice(start, end);
+  const total = filteredFps.length;
+  const pages = Math.ceil(total/PAGE_SIZE)||1;
+
+  document.getElementById('fps-count').textContent = `共 ${total} 筆`;
+  document.getElementById('fps-pager-info').textContent =
+    `第 ${fpsPage} / ${pages} 頁，共 ${total} 筆`;
+  document.getElementById('fps-prev').disabled = fpsPage <= 1;
+  document.getElementById('fps-next').disabled = fpsPage >= pages;
+
+  const rows = page.map(p => `<tr>
+    <td class="mono" style="color:var(--bluelight)">${p.part_number||'─'}</td>
+    <td>${p.drawing||'─'}</td>
+    <td>${p.material||'─'}</td>
+    <td>${p.revision||'─'}</td>
+    <td class="mono" style="color:var(--gray)">${p.drawing_no||'─'}</td>
+    <td style="color:var(--gray)">${(p.created||'').slice(0,10)}</td>
+  </tr>`).join('') || '<tr class="empty-row"><td colspan="6">沒有符合條件的資料</td></tr>';
+
+  document.getElementById('fps-tbody').innerHTML = rows;
+}
+
+function fpsPrev() { if(fpsPage>1){ fpsPage--; renderFps(); } }
+function fpsNext() { if(fpsPage*PAGE_SIZE<filteredFps.length){ fpsPage++; renderFps(); } }
+
+// ═══════════════════════════════════════════
+//  Init
+// ═══════════════════════════════════════════
+document.getElementById('topbar-date').textContent = new Date().toLocaleDateString('zh-TW');
+loadData();
+</script>
+</body>
+</html>

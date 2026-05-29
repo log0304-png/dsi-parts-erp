@@ -1,0 +1,7 @@
+flask
+gunicorn
+gspread
+google-auth
+google-genai
+pymupdf
+requests
