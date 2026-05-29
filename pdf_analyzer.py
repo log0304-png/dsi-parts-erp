@@ -77,6 +77,16 @@ PROMPT_MATERIAL_FALLBACK = (
 # Google Sheets 連線
 # ═══════════════════════════════════════════════════
 
+def _get_creds():
+    creds_json = os.environ.get("GOOGLE_CREDENTIALS_JSON")
+    if creds_json:
+        return Credentials.from_service_account_info(json.loads(creds_json), scopes=SCOPES)
+    return Credentials.from_service_account_file(str(CREDS_FILE), scopes=SCOPES)
+
+def get_spreadsheet():
+    """回傳 gspread Spreadsheet 物件（供其他模組直接存取任意工作表）"""
+    return gspread.authorize(_get_creds()).open(SHEET_NAME)
+
 def connect_sheets():
     """連線 Google Sheets，回傳三個工作表物件和預載資料"""
     creds_json = os.environ.get("GOOGLE_CREDENTIALS_JSON")

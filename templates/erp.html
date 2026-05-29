@@ -106,6 +106,12 @@ tr:hover>td { background:var(--rowhover); }
 .cat-E   { background:rgba(200,100,255,.15); color:#D488FF; }
 .cat-S   { background:rgba(100,220,180,.15); color:#66DDBB; }
 .cat-other { background:rgba(255,255,255,.08); color:var(--gray); }
+.st-active   { background:rgba(0,120,200,.18); color:var(--bluelight); }
+.st-done     { background:rgba(100,220,130,.15); color:var(--green); }
+.st-cancel   { background:rgba(255,110,100,.15); color:var(--red); }
+.st-pending  { background:rgba(255,180,0,.15); color:var(--yellow); }
+.st-approved { background:rgba(100,220,130,.15); color:var(--green); }
+.st-reject   { background:rgba(255,110,100,.15); color:var(--red); }
 
 /* ── Filter ── */
 .filter-row { display:flex; gap:10px; margin-bottom:14px; align-items:center; flex-wrap:wrap; }
@@ -121,6 +127,10 @@ select.filter-sel option { background:var(--panel); }
 .btn-sm { padding:4px 10px; font-size:11px; }
 .btn-ghost { background:transparent; border:1px solid var(--border); color:var(--gray); }
 .btn-ghost:hover { border-color:var(--blue); color:var(--blue); }
+.btn-green { background:#1a6e35; border:1px solid var(--green); color:var(--green); }
+.btn-green:hover { background:#236e3a; }
+.btn-red { background:#6e1a1a; border:1px solid var(--red); color:var(--red); }
+.btn-red:hover { background:#7a2020; }
 
 /* ── Loading ── */
 .loading { text-align:center; padding:48px; color:var(--gray); font-size:12px; }
@@ -136,6 +146,32 @@ select.filter-sel option { background:var(--panel); }
 .pager button { background:var(--input); border:1px solid var(--border); color:var(--lightgray); padding:3px 10px; border-radius:3px; cursor:pointer; font-size:11px; }
 .pager button:hover:not(:disabled) { border-color:var(--blue); color:var(--blue); }
 .pager button:disabled { opacity:0.35; cursor:default; }
+
+/* ── Modal ── */
+.modal-overlay { display:none; position:fixed; inset:0; background:rgba(0,0,0,0.65); z-index:1000; align-items:center; justify-content:center; }
+.modal-overlay.open { display:flex; }
+.modal { background:var(--panel); border:1px solid var(--border); border-radius:8px; width:500px; max-width:96vw; padding:24px; }
+.modal-hdr { display:flex; align-items:center; justify-content:space-between; margin-bottom:18px; }
+.modal-title { font-size:14px; font-weight:700; }
+.modal-close { background:none; border:none; color:var(--gray); font-size:20px; cursor:pointer; line-height:1; padding:2px 6px; }
+.modal-close:hover { color:var(--white); }
+.form-row { margin-bottom:14px; }
+.form-label { font-size:11px; color:var(--gray); margin-bottom:5px; }
+.form-input { background:var(--input); border:1px solid var(--border); color:var(--white); padding:8px 12px; border-radius:4px; font-size:12px; font-family:inherit; width:100%; outline:none; transition:border-color .15s; }
+.form-input:focus { border-color:var(--blue); }
+.form-row-2 { display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-bottom:14px; }
+.modal-footer { display:flex; justify-content:flex-end; gap:8px; margin-top:20px; }
+
+/* ── Toast ── */
+.toast { position:fixed; bottom:24px; right:24px; background:var(--card); border:1px solid var(--border); border-left:3px solid var(--blue); border-radius:6px; padding:12px 18px; font-size:12px; z-index:9999; opacity:0; pointer-events:none; transition:opacity .3s; }
+.toast.show { opacity:1; }
+.toast.ok  { border-left-color:var(--green); }
+.toast.err { border-left-color:var(--red); }
+
+/* ── Qty highlight ── */
+.qty-low  { color:var(--red); font-weight:700; }
+.qty-ok   { color:var(--green); }
+.qty-zero { color:var(--red); font-weight:700; }
 </style>
 </head>
 <body>
@@ -165,6 +201,17 @@ select.filter-sel option { background:var(--panel); }
       <span class="nav-icon">◈</span> 圖面特徵庫
     </div>
     <div class="nav-divider"></div>
+    <div class="nav-label">採購管理</div>
+    <div class="nav-item" data-page="inventory" onclick="go('inventory')">
+      <span class="nav-icon">📦</span> 庫存管理
+    </div>
+    <div class="nav-item" data-page="purchase" onclick="go('purchase')">
+      <span class="nav-icon">📋</span> 採購單
+    </div>
+    <div class="nav-item" data-page="approval" onclick="go('approval')">
+      <span class="nav-icon">✅</span> 承認狀況
+    </div>
+    <div class="nav-divider"></div>
     <div class="nav-label">工具</div>
     <a class="nav-ext" href="/" target="_blank">
       <span class="nav-icon">➕</span> PDF 料號產生
@@ -173,7 +220,7 @@ select.filter-sel option { background:var(--panel); }
 
   <div class="sidebar-footer">
     <div class="db-status"><span class="status-dot"></span><span>Google Sheets 連線中</span></div>
-    <div style="opacity:.45">DSI ERP v1.0 · 機構料號系統</div>
+    <div style="opacity:.45">DSI ERP v1.1 · 機構料號系統</div>
   </div>
 </aside>
 
@@ -188,6 +235,7 @@ select.filter-sel option { background:var(--panel); }
   </div>
 
   <div class="content">
+
     <!-- 儀表板 -->
     <div class="page active" id="page-dashboard">
       <div class="loading"><div class="spinner"></div><br>載入資料中...</div>
@@ -217,7 +265,7 @@ select.filter-sel option { background:var(--panel); }
             <th>料號</th><th>分類</th><th>專案</th><th>圖面</th>
             <th>材質</th><th>版次</th><th>設計者</th><th>圖號</th><th>建立時間</th>
           </tr></thead>
-          <tbody id="parts-tbody"><tr class="loading-row"><td colspan="9" style="text-align:center;padding:32px;color:var(--gray)">載入中...</td></tr></tbody>
+          <tbody id="parts-tbody"><tr><td colspan="9" style="text-align:center;padding:32px;color:var(--gray)">載入中...</td></tr></tbody>
         </table>
         <div class="pager">
           <span class="pager-info" id="parts-pager-info"></span>
@@ -252,27 +300,261 @@ select.filter-sel option { background:var(--panel); }
         </div>
       </div>
     </div>
-  </div>
+
+    <!-- 庫存管理 -->
+    <div class="page" id="page-inventory">
+      <div class="section-hdr">
+        <div>
+          <div class="section-title">庫存管理</div>
+          <div class="section-sub" id="inv-count">─</div>
+        </div>
+        <div style="display:flex;gap:8px">
+          <button class="btn btn-sm" onclick="openModal('inv-in-modal')">📥 入庫</button>
+          <button class="btn btn-sm btn-ghost" onclick="openModal('inv-out-modal')">📤 出庫</button>
+        </div>
+      </div>
+      <div class="filter-row">
+        <input class="search-box" id="inv-search" placeholder="搜尋料號 / 品名 / 儲位..." oninput="filterInv()">
+      </div>
+      <div class="tbl-wrap">
+        <table>
+          <thead><tr>
+            <th>料號</th><th>品名</th><th>庫存量</th><th>儲位</th><th>最後更新</th>
+          </tr></thead>
+          <tbody id="inv-tbody"><tr><td colspan="5" style="text-align:center;padding:32px;color:var(--gray)">載入中...</td></tr></tbody>
+        </table>
+        <div class="pager">
+          <span class="pager-info" id="inv-pager-info"></span>
+          <button id="inv-prev" onclick="invPrev()">◀ 上一頁</button>
+          <button id="inv-next" onclick="invNext()">下一頁 ▶</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 採購單 -->
+    <div class="page" id="page-purchase">
+      <div class="section-hdr">
+        <div>
+          <div class="section-title">採購單</div>
+          <div class="section-sub" id="po-count">─</div>
+        </div>
+        <button class="btn btn-sm" onclick="openModal('po-modal')">➕ 新增採購單</button>
+      </div>
+      <div class="filter-row">
+        <input class="search-box" id="po-search" placeholder="搜尋採購單號 / 料號 / 廠商..." oninput="filterPo()">
+        <select class="filter-sel" id="po-status-filter" onchange="filterPo()">
+          <option value="">全部狀態</option>
+          <option>進行中</option>
+          <option>完成</option>
+          <option>取消</option>
+        </select>
+      </div>
+      <div class="tbl-wrap">
+        <table>
+          <thead><tr>
+            <th>採購單號</th><th>料號</th><th>廠商</th><th>數量</th><th>交期</th><th>備註</th><th>狀態</th><th>建立時間</th><th>操作</th>
+          </tr></thead>
+          <tbody id="po-tbody"><tr><td colspan="9" style="text-align:center;padding:32px;color:var(--gray)">載入中...</td></tr></tbody>
+        </table>
+        <div class="pager">
+          <span class="pager-info" id="po-pager-info"></span>
+          <button id="po-prev" onclick="poPrev()">◀ 上一頁</button>
+          <button id="po-next" onclick="poNext()">下一頁 ▶</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 承認狀況 -->
+    <div class="page" id="page-approval">
+      <div class="section-hdr">
+        <div>
+          <div class="section-title">承認狀況</div>
+          <div class="section-sub" id="apv-count">─</div>
+        </div>
+        <button class="btn btn-sm" onclick="openModal('apv-modal')">➕ 新增承認</button>
+      </div>
+      <div class="filter-row">
+        <input class="search-box" id="apv-search" placeholder="搜尋料號 / 廠商 / 狀態..." oninput="filterApv()">
+        <select class="filter-sel" id="apv-status-filter" onchange="filterApv()">
+          <option value="">全部狀態</option>
+          <option>承認中</option>
+          <option>已承認</option>
+          <option>未承認</option>
+          <option>拒絕</option>
+        </select>
+      </div>
+      <div class="tbl-wrap">
+        <table>
+          <thead><tr>
+            <th>料號</th><th>廠商</th><th>狀態</th><th>日期</th><th>備註</th><th>建立時間</th>
+          </tr></thead>
+          <tbody id="apv-tbody"><tr><td colspan="6" style="text-align:center;padding:32px;color:var(--gray)">載入中...</td></tr></tbody>
+        </table>
+        <div class="pager">
+          <span class="pager-info" id="apv-pager-info"></span>
+          <button id="apv-prev" onclick="apvPrev()">◀ 上一頁</button>
+          <button id="apv-next" onclick="apvNext()">下一頁 ▶</button>
+        </div>
+      </div>
+    </div>
+
+  </div><!-- /content -->
 </main>
 </div>
+
+<!-- ══ Modals ══════════════════════════════════ -->
+
+<!-- 入庫 -->
+<div class="modal-overlay" id="inv-in-modal">
+  <div class="modal">
+    <div class="modal-hdr">
+      <div class="modal-title">📥 入庫</div>
+      <button class="modal-close" onclick="closeModal('inv-in-modal')">✕</button>
+    </div>
+    <div class="form-row">
+      <div class="form-label">料號 *</div>
+      <input class="form-input" id="inv-in-part" placeholder="輸入料號">
+    </div>
+    <div class="form-row">
+      <div class="form-label">品名</div>
+      <input class="form-input" id="inv-in-name" placeholder="輸入品名（選填）">
+    </div>
+    <div class="form-row-2">
+      <div>
+        <div class="form-label">入庫數量 *</div>
+        <input class="form-input" id="inv-in-qty" type="number" min="1" placeholder="0">
+      </div>
+      <div>
+        <div class="form-label">儲位</div>
+        <input class="form-input" id="inv-in-loc" placeholder="例：A-01（選填）">
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost btn-sm" onclick="closeModal('inv-in-modal')">取消</button>
+      <button class="btn btn-sm" onclick="submitInvIn()">確認入庫</button>
+    </div>
+  </div>
+</div>
+
+<!-- 出庫 -->
+<div class="modal-overlay" id="inv-out-modal">
+  <div class="modal">
+    <div class="modal-hdr">
+      <div class="modal-title">📤 出庫</div>
+      <button class="modal-close" onclick="closeModal('inv-out-modal')">✕</button>
+    </div>
+    <div class="form-row">
+      <div class="form-label">料號 *</div>
+      <input class="form-input" id="inv-out-part" placeholder="輸入料號">
+    </div>
+    <div class="form-row">
+      <div class="form-label">出庫數量 *</div>
+      <input class="form-input" id="inv-out-qty" type="number" min="1" placeholder="0">
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost btn-sm" onclick="closeModal('inv-out-modal')">取消</button>
+      <button class="btn btn-sm" onclick="submitInvOut()">確認出庫</button>
+    </div>
+  </div>
+</div>
+
+<!-- 新增採購單 -->
+<div class="modal-overlay" id="po-modal">
+  <div class="modal">
+    <div class="modal-hdr">
+      <div class="modal-title">➕ 新增採購單</div>
+      <button class="modal-close" onclick="closeModal('po-modal')">✕</button>
+    </div>
+    <div class="form-row">
+      <div class="form-label">料號 *</div>
+      <input class="form-input" id="po-part" placeholder="輸入料號">
+    </div>
+    <div class="form-row">
+      <div class="form-label">廠商 *</div>
+      <input class="form-input" id="po-vendor" placeholder="輸入廠商名稱">
+    </div>
+    <div class="form-row-2">
+      <div>
+        <div class="form-label">數量 *</div>
+        <input class="form-input" id="po-qty" type="number" min="1" placeholder="0">
+      </div>
+      <div>
+        <div class="form-label">交期</div>
+        <input class="form-input" id="po-due" type="date">
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-label">備註</div>
+      <input class="form-input" id="po-note" placeholder="備註（選填）">
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost btn-sm" onclick="closeModal('po-modal')">取消</button>
+      <button class="btn btn-sm" onclick="submitPo()">建立採購單</button>
+    </div>
+  </div>
+</div>
+
+<!-- 新增承認 -->
+<div class="modal-overlay" id="apv-modal">
+  <div class="modal">
+    <div class="modal-hdr">
+      <div class="modal-title">➕ 新增承認記錄</div>
+      <button class="modal-close" onclick="closeModal('apv-modal')">✕</button>
+    </div>
+    <div class="form-row">
+      <div class="form-label">料號 *</div>
+      <input class="form-input" id="apv-part" placeholder="輸入料號">
+    </div>
+    <div class="form-row">
+      <div class="form-label">廠商 *</div>
+      <input class="form-input" id="apv-vendor" placeholder="輸入廠商名稱">
+    </div>
+    <div class="form-row-2">
+      <div>
+        <div class="form-label">狀態 *</div>
+        <select class="form-input" id="apv-status-sel" style="background:var(--input);cursor:pointer">
+          <option>承認中</option>
+          <option>已承認</option>
+          <option>未承認</option>
+          <option>拒絕</option>
+        </select>
+      </div>
+      <div>
+        <div class="form-label">日期</div>
+        <input class="form-input" id="apv-date" type="date">
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-label">備註</div>
+      <input class="form-input" id="apv-note" placeholder="備註（選填）">
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost btn-sm" onclick="closeModal('apv-modal')">取消</button>
+      <button class="btn btn-sm" onclick="submitApv()">新增承認</button>
+    </div>
+  </div>
+</div>
+
+<!-- Toast -->
+<div class="toast" id="toast"></div>
 
 <script>
 // ═══════════════════════════════════════════
 //  State
 // ═══════════════════════════════════════════
-let allParts = [];
-let allFps   = [];
-let filteredParts = [];
-let filteredFps   = [];
+let allParts = [], allFps = [], allInv = [], allPo = [], allApv = [];
+let filteredParts = [], filteredFps = [], filteredInv = [], filteredPo = [], filteredApv = [];
 const PAGE_SIZE = 30;
-let partsPage = 1;
-let fpsPage   = 1;
+let partsPage = 1, fpsPage = 1, invPage = 1, poPage = 1, apvPage = 1;
 let currentPage = 'dashboard';
 
 // ═══════════════════════════════════════════
 //  Navigation
 // ═══════════════════════════════════════════
-const TITLES = { dashboard:'儀表板', parts:'機構料號資料庫', fps:'圖面特徵庫' };
+const TITLES = {
+  dashboard: '儀表板', parts: '機構料號資料庫', fps: '圖面特徵庫',
+  inventory: '庫存管理', purchase: '採購單', approval: '承認狀況'
+};
 
 function go(page) {
   document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
@@ -285,31 +567,58 @@ function go(page) {
 }
 
 // ═══════════════════════════════════════════
+//  Modal helpers
+// ═══════════════════════════════════════════
+function openModal(id) { document.getElementById(id).classList.add('open'); }
+function closeModal(id) { document.getElementById(id).classList.remove('open'); }
+
+// Close on overlay click
+document.addEventListener('click', e => {
+  if (e.target.classList.contains('modal-overlay')) e.target.classList.remove('open');
+});
+
+// ═══════════════════════════════════════════
+//  Toast
+// ═══════════════════════════════════════════
+let _toastTimer = null;
+function showToast(msg, ok = true) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.className = 'toast show ' + (ok ? 'ok' : 'err');
+  if (_toastTimer) clearTimeout(_toastTimer);
+  _toastTimer = setTimeout(() => { t.className = 'toast'; }, 3500);
+}
+
+// ═══════════════════════════════════════════
 //  Data Loading
 // ═══════════════════════════════════════════
 async function loadData() {
   try {
-    const [pRes, fRes] = await Promise.all([
+    const [pRes, fRes, iRes, poRes, apvRes] = await Promise.all([
       fetch('/api/parts'),
       fetch('/api/fps'),
+      fetch('/api/inventory'),
+      fetch('/api/purchase'),
+      fetch('/api/approval'),
     ]);
-    const pJson = await pRes.json();
-    const fJson = await fRes.json();
+    const pJson   = await pRes.json();
+    const fJson   = await fRes.json();
+    const iJson   = await iRes.json();
+    const poJson  = await poRes.json();
+    const apvJson = await apvRes.json();
 
-    if (pJson.ok) {
-      allParts = pJson.data;
-      filteredParts = [...allParts];
-      populateCatFilter();
-      populateProjFilter();
-    }
-    if (fJson.ok) {
-      allFps = fJson.data;
-      filteredFps = [...allFps];
-    }
+    if (pJson.ok)   { allParts = pJson.data;   filteredParts = [...allParts]; populateCatFilter(); populateProjFilter(); }
+    if (fJson.ok)   { allFps   = fJson.data;   filteredFps   = [...allFps]; }
+    if (iJson.ok)   { allInv   = iJson.data;   filteredInv   = [...allInv]; }
+    if (poJson.ok)  { allPo    = poJson.data;   filteredPo    = [...allPo]; }
+    if (apvJson.ok) { allApv   = apvJson.data;  filteredApv   = [...allApv]; }
 
     renderDashboard();
     renderParts();
     renderFps();
+    renderInv();
+    renderPo();
+    renderApv();
   } catch(e) {
     document.getElementById('page-dashboard').innerHTML =
       `<div style="color:var(--red);padding:32px">載入失敗：${e.message}</div>`;
@@ -317,7 +626,7 @@ async function loadData() {
 }
 
 function refreshData() {
-  allParts = []; allFps = [];
+  allParts = []; allFps = []; allInv = []; allPo = []; allApv = [];
   document.getElementById('page-dashboard').innerHTML =
     '<div class="loading"><div class="spinner"></div><br>載入資料中...</div>';
   loadData();
@@ -328,21 +637,18 @@ function refreshData() {
 // ═══════════════════════════════════════════
 function renderDashboard() {
   const total  = allParts.length;
-  const cats   = [...new Set(allParts.map(p => p.category).filter(Boolean))];
-  const projs  = [...new Set(allParts.map(p => p.project).filter(Boolean))];
   const fps    = allFps.length;
-
+  const cats   = [...new Set(allParts.map(p => p.category).filter(Boolean))];
   const now    = new Date();
   const cutoff = new Date(now - 7*24*3600*1000).toISOString().slice(0,10);
   const recent = allParts.filter(p => (p.created||'') >= cutoff);
 
-  // Category breakdown
   const catMap = {};
   allParts.forEach(p => { catMap[p.category||'其他'] = (catMap[p.category||'其他']||0)+1; });
   const catRows = Object.entries(catMap).sort((a,b)=>b[1]-a[1])
     .map(([cat,cnt]) => {
       const cls = cat.startsWith('M')?'cat-M':cat.startsWith('E')?'cat-E':cat.startsWith('S')?'cat-S':'cat-other';
-      const pct = Math.round(cnt/total*100);
+      const pct = total ? Math.round(cnt/total*100) : 0;
       return `<tr>
         <td><span class="badge ${cls}">${cat||'─'}</span></td>
         <td style="color:var(--white)">${cnt}</td>
@@ -357,7 +663,6 @@ function renderDashboard() {
       </tr>`;
     }).join('');
 
-  // Recent 10
   const recentRows = [...allParts].reverse().slice(0,10).map(p => {
     const cls = (p.category||'').startsWith('M')?'cat-M':(p.category||'').startsWith('E')?'cat-E':'cat-other';
     return `<tr>
@@ -369,6 +674,9 @@ function renderDashboard() {
       <td style="color:var(--gray)">${(p.created||'').slice(0,10)}</td>
     </tr>`;
   }).join('') || '<tr><td colspan="6" style="text-align:center;color:var(--gray);padding:24px">尚無料號資料</td></tr>';
+
+  const invTotal = allInv.reduce((s,r) => s + (parseInt(r.qty)||0), 0);
+  const poActive = allPo.filter(r => r.status === '進行中').length;
 
   document.getElementById('page-dashboard').innerHTML = `
     <div class="stats-grid">
@@ -384,17 +692,17 @@ function renderDashboard() {
         <div class="stat-value">${fps}</div>
         <div class="stat-sub">圖面特徵庫</div>
       </div>
-      <div class="stat-card purple">
-        <div class="stat-icon">📁</div>
-        <div class="stat-label">分類數</div>
-        <div class="stat-value">${cats.length}</div>
-        <div class="stat-sub">料號分類</div>
+      <div class="stat-card yellow">
+        <div class="stat-icon">📦</div>
+        <div class="stat-label">庫存總量</div>
+        <div class="stat-value">${invTotal}</div>
+        <div class="stat-sub">所有料號庫存</div>
       </div>
       <div class="stat-card green">
-        <div class="stat-icon">📅</div>
-        <div class="stat-label">近7日新增</div>
-        <div class="stat-value">${recent.length}</div>
-        <div class="stat-sub">最近一週</div>
+        <div class="stat-icon">📋</div>
+        <div class="stat-label">進行中採購</div>
+        <div class="stat-value">${poActive}</div>
+        <div class="stat-sub">採購單進行中</div>
       </div>
     </div>
 
@@ -457,14 +765,12 @@ function filterParts() {
 
 function renderParts() {
   const start  = (partsPage-1)*PAGE_SIZE;
-  const end    = start + PAGE_SIZE;
-  const page   = filteredParts.slice(start, end);
+  const page   = filteredParts.slice(start, start+PAGE_SIZE);
   const total  = filteredParts.length;
   const pages  = Math.ceil(total/PAGE_SIZE)||1;
 
   document.getElementById('parts-count').textContent = `共 ${total} 筆`;
-  document.getElementById('parts-pager-info').textContent =
-    `第 ${partsPage} / ${pages} 頁，共 ${total} 筆`;
+  document.getElementById('parts-pager-info').textContent = `第 ${partsPage} / ${pages} 頁，共 ${total} 筆`;
   document.getElementById('parts-prev').disabled = partsPage <= 1;
   document.getElementById('parts-next').disabled = partsPage >= pages;
 
@@ -504,14 +810,12 @@ function filterFps() {
 
 function renderFps() {
   const start = (fpsPage-1)*PAGE_SIZE;
-  const end   = start + PAGE_SIZE;
-  const page  = filteredFps.slice(start, end);
+  const page  = filteredFps.slice(start, start+PAGE_SIZE);
   const total = filteredFps.length;
   const pages = Math.ceil(total/PAGE_SIZE)||1;
 
   document.getElementById('fps-count').textContent = `共 ${total} 筆`;
-  document.getElementById('fps-pager-info').textContent =
-    `第 ${fpsPage} / ${pages} 頁，共 ${total} 筆`;
+  document.getElementById('fps-pager-info').textContent = `第 ${fpsPage} / ${pages} 頁，共 ${total} 筆`;
   document.getElementById('fps-prev').disabled = fpsPage <= 1;
   document.getElementById('fps-next').disabled = fpsPage >= pages;
 
@@ -529,6 +833,284 @@ function renderFps() {
 
 function fpsPrev() { if(fpsPage>1){ fpsPage--; renderFps(); } }
 function fpsNext() { if(fpsPage*PAGE_SIZE<filteredFps.length){ fpsPage++; renderFps(); } }
+
+// ═══════════════════════════════════════════
+//  Inventory
+// ═══════════════════════════════════════════
+function filterInv() {
+  const q = document.getElementById('inv-search').value.toLowerCase();
+  filteredInv = allInv.filter(r =>
+    !q || [r.part_number, r.name, r.location]
+      .some(v => (v||'').toLowerCase().includes(q))
+  );
+  invPage = 1;
+  renderInv();
+}
+
+function renderInv() {
+  const start = (invPage-1)*PAGE_SIZE;
+  const page  = filteredInv.slice(start, start+PAGE_SIZE);
+  const total = filteredInv.length;
+  const pages = Math.ceil(total/PAGE_SIZE)||1;
+
+  document.getElementById('inv-count').textContent = `共 ${total} 筆`;
+  document.getElementById('inv-pager-info').textContent = `第 ${invPage} / ${pages} 頁，共 ${total} 筆`;
+  document.getElementById('inv-prev').disabled = invPage <= 1;
+  document.getElementById('inv-next').disabled = invPage >= pages;
+
+  const rows = page.map(r => {
+    const qty = parseInt(r.qty)||0;
+    const qtyCls = qty === 0 ? 'qty-zero' : qty < 5 ? 'qty-low' : 'qty-ok';
+    return `<tr>
+      <td class="mono" style="color:var(--bluelight)">${r.part_number||'─'}</td>
+      <td>${r.name||'─'}</td>
+      <td class="${qtyCls}" style="font-weight:600">${qty}</td>
+      <td>${r.location||'─'}</td>
+      <td style="color:var(--gray)">${(r.updated||'').slice(0,16)}</td>
+    </tr>`;
+  }).join('') || '<tr class="empty-row"><td colspan="5">尚無庫存資料</td></tr>';
+
+  document.getElementById('inv-tbody').innerHTML = rows;
+}
+
+function invPrev() { if(invPage>1){ invPage--; renderInv(); } }
+function invNext() { if(invPage*PAGE_SIZE<filteredInv.length){ invPage++; renderInv(); } }
+
+async function submitInvIn() {
+  const part = document.getElementById('inv-in-part').value.trim();
+  const name = document.getElementById('inv-in-name').value.trim();
+  const qty  = parseInt(document.getElementById('inv-in-qty').value)||0;
+  const loc  = document.getElementById('inv-in-loc').value.trim();
+
+  if (!part) { showToast('請填入料號', false); return; }
+  if (qty < 1) { showToast('入庫數量須大於 0', false); return; }
+
+  try {
+    const res = await fetch('/api/inventory/in', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ part_number:part, name, qty, location:loc })
+    });
+    const j = await res.json();
+    if (j.ok) {
+      showToast(`入庫成功：${part} +${qty}`);
+      closeModal('inv-in-modal');
+      document.getElementById('inv-in-part').value = '';
+      document.getElementById('inv-in-name').value = '';
+      document.getElementById('inv-in-qty').value  = '';
+      document.getElementById('inv-in-loc').value  = '';
+      const iRes = await fetch('/api/inventory');
+      const iJson = await iRes.json();
+      if (iJson.ok) { allInv = iJson.data; filteredInv = [...allInv]; renderInv(); renderDashboard(); }
+    } else {
+      showToast(j.error || '入庫失敗', false);
+    }
+  } catch(e) { showToast('網路錯誤：' + e.message, false); }
+}
+
+async function submitInvOut() {
+  const part = document.getElementById('inv-out-part').value.trim();
+  const qty  = parseInt(document.getElementById('inv-out-qty').value)||0;
+
+  if (!part) { showToast('請填入料號', false); return; }
+  if (qty < 1) { showToast('出庫數量須大於 0', false); return; }
+
+  try {
+    const res = await fetch('/api/inventory/out', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ part_number:part, qty })
+    });
+    const j = await res.json();
+    if (j.ok) {
+      showToast(`出庫成功：${part} -${qty}`);
+      closeModal('inv-out-modal');
+      document.getElementById('inv-out-part').value = '';
+      document.getElementById('inv-out-qty').value  = '';
+      const iRes = await fetch('/api/inventory');
+      const iJson = await iRes.json();
+      if (iJson.ok) { allInv = iJson.data; filteredInv = [...allInv]; renderInv(); renderDashboard(); }
+    } else {
+      showToast(j.error || '出庫失敗', false);
+    }
+  } catch(e) { showToast('網路錯誤：' + e.message, false); }
+}
+
+// ═══════════════════════════════════════════
+//  Purchase Orders
+// ═══════════════════════════════════════════
+function filterPo() {
+  const q   = document.getElementById('po-search').value.toLowerCase();
+  const st  = document.getElementById('po-status-filter').value;
+  filteredPo = allPo.filter(r => {
+    const matchQ = !q || [r.po_no, r.part_number, r.vendor, r.note]
+      .some(v => (v||'').toLowerCase().includes(q));
+    const matchS = !st || r.status === st;
+    return matchQ && matchS;
+  });
+  poPage = 1;
+  renderPo();
+}
+
+function poStatusBadge(st) {
+  if (st === '完成')  return `<span class="badge st-done">${st}</span>`;
+  if (st === '取消')  return `<span class="badge st-cancel">${st}</span>`;
+  return `<span class="badge st-active">${st||'進行中'}</span>`;
+}
+
+function renderPo() {
+  const start = (poPage-1)*PAGE_SIZE;
+  const page  = filteredPo.slice(start, start+PAGE_SIZE);
+  const total = filteredPo.length;
+  const pages = Math.ceil(total/PAGE_SIZE)||1;
+
+  document.getElementById('po-count').textContent = `共 ${total} 筆`;
+  document.getElementById('po-pager-info').textContent = `第 ${poPage} / ${pages} 頁，共 ${total} 筆`;
+  document.getElementById('po-prev').disabled = poPage <= 1;
+  document.getElementById('po-next').disabled = poPage >= pages;
+
+  const rows = page.map(r => {
+    const canComplete = (r.status||'進行中') === '進行中';
+    return `<tr>
+      <td class="mono" style="color:var(--bluelight)">${r.po_no||'─'}</td>
+      <td class="mono">${r.part_number||'─'}</td>
+      <td>${r.vendor||'─'}</td>
+      <td>${r.qty||'─'}</td>
+      <td style="color:var(--gray)">${r.due_date||'─'}</td>
+      <td style="color:var(--gray)">${r.note||'─'}</td>
+      <td>${poStatusBadge(r.status)}</td>
+      <td style="color:var(--gray)">${(r.created||'').slice(0,10)}</td>
+      <td>${canComplete ? `<button class="btn btn-sm btn-green" onclick="completePo('${r.po_no}')">完成</button>` : '─'}</td>
+    </tr>`;
+  }).join('') || '<tr class="empty-row"><td colspan="9">尚無採購單資料</td></tr>';
+
+  document.getElementById('po-tbody').innerHTML = rows;
+}
+
+function poPrev() { if(poPage>1){ poPage--; renderPo(); } }
+function poNext() { if(poPage*PAGE_SIZE<filteredPo.length){ poPage++; renderPo(); } }
+
+async function submitPo() {
+  const part   = document.getElementById('po-part').value.trim();
+  const vendor = document.getElementById('po-vendor').value.trim();
+  const qty    = parseInt(document.getElementById('po-qty').value)||0;
+  const due    = document.getElementById('po-due').value;
+  const note   = document.getElementById('po-note').value.trim();
+
+  if (!part)   { showToast('請填入料號', false); return; }
+  if (!vendor) { showToast('請填入廠商', false); return; }
+  if (qty < 1) { showToast('數量須大於 0', false); return; }
+
+  try {
+    const res = await fetch('/api/purchase', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ part_number:part, vendor, qty, due_date:due, note })
+    });
+    const j = await res.json();
+    if (j.ok) {
+      showToast(`採購單建立成功：${j.po_no}`);
+      closeModal('po-modal');
+      ['po-part','po-vendor','po-qty','po-due','po-note'].forEach(id => document.getElementById(id).value='');
+      const poRes = await fetch('/api/purchase');
+      const poJson = await poRes.json();
+      if (poJson.ok) { allPo = poJson.data; filteredPo = [...allPo]; renderPo(); renderDashboard(); }
+    } else {
+      showToast(j.error || '建立失敗', false);
+    }
+  } catch(e) { showToast('網路錯誤：' + e.message, false); }
+}
+
+async function completePo(poNo) {
+  if (!confirm(`確認將採購單 ${poNo} 標記為完成？`)) return;
+  try {
+    const res = await fetch(`/api/purchase/${poNo}/complete`, { method:'POST' });
+    const j = await res.json();
+    if (j.ok) {
+      showToast(`${poNo} 已標記完成`);
+      const poRes = await fetch('/api/purchase');
+      const poJson = await poRes.json();
+      if (poJson.ok) { allPo = poJson.data; filteredPo = [...allPo]; renderPo(); renderDashboard(); }
+    } else {
+      showToast(j.error || '操作失敗', false);
+    }
+  } catch(e) { showToast('網路錯誤：' + e.message, false); }
+}
+
+// ═══════════════════════════════════════════
+//  Approval
+// ═══════════════════════════════════════════
+function filterApv() {
+  const q  = document.getElementById('apv-search').value.toLowerCase();
+  const st = document.getElementById('apv-status-filter').value;
+  filteredApv = allApv.filter(r => {
+    const matchQ = !q || [r.part_number, r.vendor, r.status, r.note]
+      .some(v => (v||'').toLowerCase().includes(q));
+    const matchS = !st || r.status === st;
+    return matchQ && matchS;
+  });
+  apvPage = 1;
+  renderApv();
+}
+
+function apvStatusBadge(st) {
+  if (st === '已承認') return `<span class="badge st-approved">${st}</span>`;
+  if (st === '拒絕')   return `<span class="badge st-reject">${st}</span>`;
+  if (st === '承認中') return `<span class="badge st-active">${st}</span>`;
+  return `<span class="badge st-pending">${st||'─'}</span>`;
+}
+
+function renderApv() {
+  const start = (apvPage-1)*PAGE_SIZE;
+  const page  = filteredApv.slice(start, start+PAGE_SIZE);
+  const total = filteredApv.length;
+  const pages = Math.ceil(total/PAGE_SIZE)||1;
+
+  document.getElementById('apv-count').textContent = `共 ${total} 筆`;
+  document.getElementById('apv-pager-info').textContent = `第 ${apvPage} / ${pages} 頁，共 ${total} 筆`;
+  document.getElementById('apv-prev').disabled = apvPage <= 1;
+  document.getElementById('apv-next').disabled = apvPage >= pages;
+
+  const rows = page.map(r => `<tr>
+    <td class="mono" style="color:var(--bluelight)">${r.part_number||'─'}</td>
+    <td>${r.vendor||'─'}</td>
+    <td>${apvStatusBadge(r.status)}</td>
+    <td style="color:var(--gray)">${r.date||'─'}</td>
+    <td style="color:var(--gray)">${r.note||'─'}</td>
+    <td style="color:var(--gray)">${(r.created||'').slice(0,10)}</td>
+  </tr>`).join('') || '<tr class="empty-row"><td colspan="6">尚無承認記錄</td></tr>';
+
+  document.getElementById('apv-tbody').innerHTML = rows;
+}
+
+function apvPrev() { if(apvPage>1){ apvPage--; renderApv(); } }
+function apvNext() { if(apvPage*PAGE_SIZE<filteredApv.length){ apvPage++; renderApv(); } }
+
+async function submitApv() {
+  const part   = document.getElementById('apv-part').value.trim();
+  const vendor = document.getElementById('apv-vendor').value.trim();
+  const status = document.getElementById('apv-status-sel').value;
+  const date   = document.getElementById('apv-date').value;
+  const note   = document.getElementById('apv-note').value.trim();
+
+  if (!part)   { showToast('請填入料號', false); return; }
+  if (!vendor) { showToast('請填入廠商', false); return; }
+
+  try {
+    const res = await fetch('/api/approval', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ part_number:part, vendor, status, date, note })
+    });
+    const j = await res.json();
+    if (j.ok) {
+      showToast('承認記錄新增成功');
+      closeModal('apv-modal');
+      ['apv-part','apv-vendor','apv-date','apv-note'].forEach(id => document.getElementById(id).value='');
+      const apvRes = await fetch('/api/approval');
+      const apvJson = await apvRes.json();
+      if (apvJson.ok) { allApv = apvJson.data; filteredApv = [...allApv]; renderApv(); }
+    } else {
+      showToast(j.error || '新增失敗', false);
+    }
+  } catch(e) { showToast('網路錯誤：' + e.message, false); }
+}
 
 // ═══════════════════════════════════════════
 //  Init
