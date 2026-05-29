@@ -10,7 +10,10 @@ import threading
 import uuid
 import logging
 from pathlib import Path
-from datetime import datetime
+import re
+import traceback
+import requests
+from datetime import datetime, timezone, timedelta
 
 sys.stdout.reconfigure(encoding="utf-8")
 
@@ -40,6 +43,263 @@ PROCESSED_DIR.mkdir(exist_ok=True)
 app = Flask(__name__)
 
 _queues: dict[str, queue.Queue] = {}
+
+# ── LINE ME助理 BOT 設定 ──────────────────────────
+_TW        = timezone(timedelta(hours=8))
+ERP_TOKEN  = os.environ.get("ERP_TOKEN", "")
+_erp_states: dict = {}  # { user_id: {"action": "入庫"/"下單"} }
+
+
+def _line_reply(reply_token, text):
+    requests.post(
+        "https://api.line.me/v2/bot/message/reply",
+        headers={"Authorization": f"Bearer {ERP_TOKEN}", "Content-Type": "application/json"},
+        json={"replyToken": reply_token, "messages": [{"type": "text", "text": text}]},
+        timeout=10,
+    )
+
+
+def handle_erp(text, reply_token, user_id=""):
+    try:
+        sh  = get_spreadsheet()
+        raw = text.strip()
+        now = datetime.now(_TW).strftime("%Y-%m-%d %H:%M:%S")
+
+        def reply(msg):
+            _line_reply(reply_token, msg)
+
+        def find_in_erp(pn):
+            rows = sh.worksheet("ERP資料庫").get_all_values()[1:]
+            pn_upper = pn.strip().upper()
+            for row in rows:
+                if len(row) > 1 and str(row[1]).strip().upper() == pn_upper:
+                    return row
+            return None
+
+        def find_rows(ws_name, col_idx, value):
+            rows = sh.worksheet(ws_name).get_all_values()[1:]
+            val_upper = value.strip().upper()
+            return [r for r in rows if len(r) > col_idx and str(r[col_idx]).strip().upper() == val_upper]
+
+        # ── 對話式流程 ────────────────────────────────
+        if raw == "我要增加庫存":
+            _erp_states[user_id] = {"action": "入庫"}
+            reply("請填寫入庫資料：\n\n料號：\n數量：\n儲位：")
+            return
+
+        if user_id in _erp_states and _erp_states[user_id]["action"] == "入庫":
+            data = {}
+            for line in raw.splitlines():
+                for key in ["料號", "數量", "儲位"]:
+                    if line.startswith(key):
+                        parts_kv = re.split(r"[：:]", line, 1)
+                        if len(parts_kv) > 1 and parts_kv[1].strip():
+                            data[key] = parts_kv[1].strip()
+            if all(k in data for k in ["料號", "數量"]):
+                del _erp_states[user_id]
+                pn  = data["料號"]
+                qty = int(data["數量"])
+                loc = data.get("儲位", "")
+                ws       = sh.worksheet("庫存管理")
+                all_rows = ws.get_all_values()
+                for i, row in enumerate(all_rows[1:], start=2):
+                    if row and str(row[0]).strip().upper() == pn.upper():
+                        old = int(row[2]) if row[2] else 0
+                        ws.update_cell(i, 3, old + qty)
+                        if loc:
+                            ws.update_cell(i, 4, loc)
+                        ws.update_cell(i, 5, now)
+                        reply(f"入庫完成\n料號：{pn}\n入庫：{qty}\n庫存：{old} → {old + qty}\n儲位：{loc or row[3]}")
+                        return
+                erp_row = find_in_erp(pn)
+                ws.append_row([pn, erp_row[4] if erp_row else "", qty, loc, now])
+                reply(f"入庫完成（新建庫存）\n料號：{pn}\n庫存：{qty}\n儲位：{loc}")
+            else:
+                reply("資料不完整，請重新填寫：\n\n料號：\n數量：\n儲位：")
+            return
+
+        if raw == "我要下單":
+            _erp_states[user_id] = {"action": "下單"}
+            reply("請填寫下單資料：\n\n料號：\n廠商：\n數量：\n交期：YYYY-MM-DD")
+            return
+
+        if user_id in _erp_states and _erp_states[user_id]["action"] == "下單":
+            data = {}
+            for line in raw.splitlines():
+                for key in ["料號", "廠商", "數量", "交期"]:
+                    if line.startswith(key):
+                        parts_kv = re.split(r"[：:]", line, 1)
+                        if len(parts_kv) > 1 and parts_kv[1].strip():
+                            data[key] = parts_kv[1].strip()
+            if all(k in data for k in ["料號", "廠商", "數量", "交期"]):
+                del _erp_states[user_id]
+                pn, vendor, qty, delivery = data["料號"], data["廠商"], int(data["數量"]), data["交期"]
+                today   = datetime.now(_TW).strftime("%Y%m%d")
+                po_rows = sh.worksheet("採購單").get_all_values()[1:]
+                prefix  = f"PO-{today}-"
+                max_seq = max((int(str(r[0])[-3:]) for r in po_rows if r and str(r[0]).startswith(prefix)), default=0)
+                po_no   = f"{prefix}{str(max_seq + 1).zfill(3)}"
+                sh.worksheet("採購單").append_row([po_no, pn, vendor, now[:10], qty, delivery, "待交貨", ""])
+                reply(f"採購單建立成功\n單號：{po_no}\n料號：{pn}\n廠商：{vendor}\n數量：{qty}\n交期：{delivery}")
+            else:
+                reply("資料不完整，請重新填寫：\n\n料號：\n廠商：\n數量：\n交期：YYYY-MM-DD")
+            return
+
+        m = re.match(r"^查\s+(\S+)$", raw)
+        if m:
+            pn  = m.group(1)
+            row = find_in_erp(pn)
+            if not row:
+                reply(f"找不到料號：{pn}")
+                return
+            reply(f"【料號資料】\n料號：{row[1]}\n分類：{row[2]}\n專案：{row[3]}\n圖面：{row[4]}\n材質：{row[5]}\n版次：{row[6]}")
+            return
+
+        m = re.match(r"^查庫存\s+(\S+)$", raw)
+        if m:
+            pn   = m.group(1)
+            rows = find_rows("庫存管理", 0, pn)
+            if not rows:
+                reply(f"{pn}\n尚無庫存紀錄")
+                return
+            r = rows[-1]
+            reply(f"【庫存查詢】\n料號：{r[0]}\n品名：{r[1]}\n庫存量：{r[2]}\n儲位：{r[3]}\n更新：{r[4]}")
+            return
+
+        m = re.match(r"^查承認\s+(\S+)$", raw)
+        if m:
+            pn   = m.group(1)
+            rows = find_rows("承認狀況", 0, pn)
+            if not rows:
+                reply(f"{pn}\n尚無承認紀錄")
+                return
+            lines = [f"  {r[1]} | {r[2]} | {r[3]}" for r in rows]
+            reply(f"【承認狀況】\n料號：{pn}\n\n廠商 | 狀態 | 日期\n" + "\n".join(lines))
+            return
+
+        m = re.match(r"^查下單\s+(\S+)$", raw)
+        if m:
+            pn   = m.group(1)
+            rows = find_rows("採購單", 1, pn)
+            if not rows:
+                reply(f"{pn}\n尚無採購紀錄")
+                return
+            lines = [f"  {r[0]} | {r[2]} | {r[4]}個 | {r[6]}" for r in rows[-3:]]
+            reply(f"【採購紀錄（最近3筆）】\n料號：{pn}\n\n" + "\n".join(lines))
+            return
+
+        m = re.match(r"^查交期\s+(\S+)$", raw)
+        if m:
+            pn      = m.group(1)
+            rows    = find_rows("採購單", 1, pn)
+            pending = [r for r in rows if len(r) > 6 and r[6] != "完成"]
+            if not pending:
+                reply(f"{pn}\n目前無待交貨採購單")
+                return
+            lines = [f"  {r[0]} | 交期：{r[5]} | {r[4]}個" for r in pending]
+            reply(f"【待交貨】\n料號：{pn}\n\n" + "\n".join(lines))
+            return
+
+        m = re.match(r"^入庫\s+(\S+)\s+(\d+)$", raw)
+        if m:
+            pn, qty  = m.group(1), int(m.group(2))
+            ws       = sh.worksheet("庫存管理")
+            all_rows = ws.get_all_values()
+            for i, row in enumerate(all_rows[1:], start=2):
+                if row and str(row[0]).strip().upper() == pn.upper():
+                    old = int(row[2]) if row[2] else 0
+                    ws.update_cell(i, 3, old + qty)
+                    ws.update_cell(i, 5, now)
+                    reply(f"入庫完成\n料號：{pn}\n入庫：{qty}\n庫存：{old} → {old + qty}")
+                    return
+            erp_row = find_in_erp(pn)
+            ws.append_row([pn, erp_row[4] if erp_row else "", qty, "", now])
+            reply(f"入庫完成（新建庫存）\n料號：{pn}\n庫存：{qty}")
+            return
+
+        m = re.match(r"^出庫\s+(\S+)\s+(\d+)$", raw)
+        if m:
+            pn, qty  = m.group(1), int(m.group(2))
+            ws       = sh.worksheet("庫存管理")
+            all_rows = ws.get_all_values()
+            for i, row in enumerate(all_rows[1:], start=2):
+                if row and str(row[0]).strip().upper() == pn.upper():
+                    old = int(row[2]) if row[2] else 0
+                    if old < qty:
+                        reply(f"庫存不足\n料號：{pn}\n現有：{old}，出庫：{qty}")
+                        return
+                    ws.update_cell(i, 3, old - qty)
+                    ws.update_cell(i, 5, now)
+                    reply(f"出庫完成\n料號：{pn}\n出庫：{qty}\n庫存：{old} → {old - qty}")
+                    return
+            reply(f"找不到庫存紀錄：{pn}")
+            return
+
+        m = re.match(r"^下單\s+(\S+)\s+(\S+)\s+(\d+)\s+(\S+)$", raw)
+        if m:
+            pn, vendor, qty, delivery = m.group(1), m.group(2), int(m.group(3)), m.group(4)
+            today   = datetime.now(_TW).strftime("%Y%m%d")
+            po_rows = sh.worksheet("採購單").get_all_values()[1:]
+            prefix  = f"PO-{today}-"
+            max_seq = max((int(str(r[0])[-3:]) for r in po_rows if r and str(r[0]).startswith(prefix)), default=0)
+            po_no   = f"{prefix}{str(max_seq + 1).zfill(3)}"
+            sh.worksheet("採購單").append_row([po_no, pn, vendor, now[:10], qty, delivery, "待交貨", ""])
+            reply(f"採購單建立\n單號：{po_no}\n料號：{pn}\n廠商：{vendor}\n數量：{qty}\n交期：{delivery}")
+            return
+
+        m = re.match(r"^到貨\s+(\S+)\s+(\d+)$", raw)
+        if m:
+            po_or_pn, qty = m.group(1), int(m.group(2))
+            ws_po   = sh.worksheet("採購單")
+            po_rows = ws_po.get_all_values()
+            pn      = po_or_pn
+            for i, row in enumerate(po_rows[1:], start=2):
+                if row and str(row[0]).strip().upper() == po_or_pn.upper():
+                    pn = row[1]
+                    ws_po.update_cell(i, 7, "完成")
+                    break
+            sh.worksheet("交貨紀錄").append_row([po_or_pn, pn, now[:10], qty, ""])
+            ws_inv   = sh.worksheet("庫存管理")
+            inv_rows = ws_inv.get_all_values()
+            updated  = False
+            for i, row in enumerate(inv_rows[1:], start=2):
+                if row and str(row[0]).strip().upper() == pn.upper():
+                    old = int(row[2]) if row[2] else 0
+                    ws_inv.update_cell(i, 3, old + qty)
+                    ws_inv.update_cell(i, 5, now)
+                    updated = True
+                    break
+            if not updated:
+                erp_row = find_in_erp(pn)
+                ws_inv.append_row([pn, erp_row[4] if erp_row else "", qty, "", now])
+            reply(f"到貨完成\n採購單：{po_or_pn}\n料號：{pn}\n到貨：{qty}件\n庫存已更新")
+            return
+
+        m = re.match(r"^承認\s+(\S+)\s+(\S+)\s+(\S+)$", raw)
+        if m:
+            pn, vendor, status = m.group(1), m.group(2), m.group(3)
+            sh.worksheet("承認狀況").append_row([pn, vendor, status, now[:10], ""])
+            reply(f"承認狀況更新\n料號：{pn}\n廠商：{vendor}\n狀態：{status}")
+            return
+
+        reply("指令格式：\n查 料號\n查庫存 料號\n查承認 料號\n查下單 料號\n查交期 料號\n入庫 料號 數量\n出庫 料號 數量\n下單 料號 廠商 數量 交期\n到貨 採購單號 數量\n承認 料號 廠商 狀態")
+
+    except Exception as e:
+        print(traceback.format_exc(), flush=True)
+        _line_reply(reply_token, "處理失敗，請稍後再試")
+
+
+@app.route("/erp", methods=["POST"])
+def webhook_erp():
+    events = request.json.get("events", [])
+    for event in events:
+        if event.get("type") != "message":
+            continue
+        if event["message"].get("type") != "text":
+            continue
+        user_id = event.get("source", {}).get("userId", "")
+        handle_erp(event["message"]["text"], event["replyToken"], user_id)
+    return "OK"
 
 
 def process_task(task_id: str, pdf_paths: list[Path]):
