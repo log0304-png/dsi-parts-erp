@@ -282,6 +282,10 @@ def handle_erp(text, reply_token, user_id=""):
             reply(f"承認狀況更新\n料號：{pn}\n廠商：{vendor}\n狀態：{status}")
             return
 
+        if raw == "我的ID":
+            reply(f"你的 LINE ID：\n{user_id}")
+            return
+
         reply("指令格式：\n查 料號\n查庫存 料號\n查承認 料號\n查下單 料號\n查交期 料號\n入庫 料號 數量\n出庫 料號 數量\n下單 料號 廠商 數量 交期\n到貨 採購單號 數量\n承認 料號 廠商 狀態")
 
     except Exception as e:
