@@ -15,7 +15,8 @@ import traceback
 import requests
 from datetime import datetime, timezone, timedelta
 
-sys.stdout.reconfigure(encoding="utf-8")
+if sys.stdout:
+    sys.stdout.reconfigure(encoding="utf-8")
 
 logging.basicConfig(
     filename=str(Path(__file__).parent / "web_app.log"),
@@ -46,8 +47,118 @@ _queues: dict[str, queue.Queue] = {}
 
 # ── LINE ME助理 BOT 設定 ──────────────────────────
 _TW        = timezone(timedelta(hours=8))
-ERP_TOKEN  = os.environ.get("ERP_TOKEN", "")
+ERP_TOKEN  = os.environ.get("ERP_TOKEN", "") or CONFIG.get("line_erp_token", "")
 _erp_states: dict = {}  # { user_id: {"action": "入庫"/"下單"} }
+
+# ── 請款 Sheet 設定 ───────────────────────────────────
+EXPENSE_SHEET_ID = "1yf62_kTCfEPt0hYg5IoGsW7_EDddGG2Ft5yiisqLPhM"
+EXPENSE_HEADERS  = ["摘要", "項目", "發票號碼", "請款人", "日期",
+                    "研發相關", "加油費", "交通費", "房租", "行銷",
+                    "郵寄費", "旅費", "餐費", "工程", "辦公室補給", "備註"]
+EXPENSE_COLS     = ["研發相關", "加油費", "交通費", "房租", "行銷",
+                    "郵寄費", "旅費", "餐費", "工程", "辦公室補給"]
+_expense_sh      = None
+
+
+def _get_expense_sheet():
+    global _expense_sh
+    if _expense_sh is None:
+        from pdf_analyzer import _get_creds
+        import gspread as _gs
+        _expense_sh = _gs.authorize(_get_creds()).open_by_key(EXPENSE_SHEET_ID)
+        existing = [ws.title for ws in _expense_sh.worksheets()]
+        if "請款" not in existing:
+            ws = _expense_sh.add_worksheet(title="請款", rows=1000, cols=16)
+            ws.update("A1:P1", [EXPENSE_HEADERS])
+    return _expense_sh
+
+
+def _get_line_display_name(user_id: str) -> str:
+    try:
+        resp = requests.get(
+            f"https://api.line.me/v2/bot/profile/{user_id}",
+            headers={"Authorization": f"Bearer {ERP_TOKEN}"},
+            timeout=5,
+        )
+        if resp.status_code == 200:
+            return resp.json().get("displayName", user_id)
+    except Exception:
+        pass
+    return user_id
+
+
+def _analyze_invoice(image_bytes: bytes) -> dict:
+    client = genai.Client(api_key=_gemini_key)
+    from google.genai import types as _gt
+    col_list = "、".join(EXPENSE_COLS)
+    prompt = (
+        "你是台灣公司請款AI。分析這張發票或收據圖片，只回傳JSON，不要解釋。\n"
+        f"expense_col 必須從以下選一個：{col_list}\n"
+        "{\n"
+        '  "date": "YYYY-MM-DD（發票日期，若無則今天）",\n'
+        '  "invoice_number": "發票號碼（若無則空字串）",\n'
+        '  "amount": 金額數字（整數，台幣）,\n'
+        '  "items": "品項描述（簡短）",\n'
+        '  "expense_col": "費用欄位",\n'
+        '  "summary": "摘要（一句話）",\n'
+        '  "notes": "備註（若有特殊說明）"\n'
+        "}"
+    )
+    image_part = _gt.Part.from_bytes(data=image_bytes, mime_type="image/jpeg")
+    resp = client.models.generate_content(
+        model="gemini-2.0-flash",
+        contents=[prompt, image_part],
+        config=_gt.GenerateContentConfig(
+            response_mime_type="application/json",
+            temperature=0.1,
+        ),
+    )
+    return json.loads(resp.text)
+
+
+def handle_invoice_image(user_id: str, message_id: str, reply_token: str):
+    try:
+        img_resp = requests.get(
+            f"https://api-data.line.me/v2/bot/message/{message_id}/content",
+            headers={"Authorization": f"Bearer {ERP_TOKEN}"},
+            timeout=15,
+        )
+        if img_resp.status_code != 200:
+            _line_reply(reply_token, "⚠️ 無法取得圖片，請重試。")
+            return
+
+        data        = _analyze_invoice(img_resp.content)
+        requester   = _get_line_display_name(user_id)
+        expense_col = data.get("expense_col", "")
+        if expense_col not in EXPENSE_COLS:
+            expense_col = EXPENSE_COLS[0]
+
+        row = [""] * 16
+        row[0]  = data.get("summary", "")
+        row[1]  = data.get("items", "")
+        row[2]  = data.get("invoice_number", "")
+        row[3]  = requester
+        row[4]  = data.get("date", datetime.now(_TW).strftime("%Y-%m-%d"))
+        col_idx = EXPENSE_HEADERS.index(expense_col)
+        row[col_idx] = data.get("amount", "")
+
+        sh = _get_expense_sheet()
+        sh.worksheet("請款").append_row(row)
+
+        _line_reply(reply_token, (
+            f"✅ 發票已記錄\n"
+            f"━━━━━━━━━━━━━━\n"
+            f"請款人：{requester}\n"
+            f"日　期：{row[4]}\n"
+            f"發票號：{row[2] or '─'}\n"
+            f"品　項：{row[1]}\n"
+            f"金　額：NT$ {data.get('amount', '─')}\n"
+            f"類　別：{expense_col}"
+        ))
+
+    except Exception as e:
+        print(traceback.format_exc(), flush=True)
+        _line_reply(reply_token, "⚠️ 發票辨識失敗，請確認圖片清晰後重試。")
 
 
 def _line_reply(reply_token, text):
@@ -80,6 +191,33 @@ def handle_erp(text, reply_token, user_id=""):
             rows = sh.worksheet(ws_name).get_all_values()[1:]
             val_upper = value.strip().upper()
             return [r for r in rows if len(r) > col_idx and str(r[col_idx]).strip().upper() == val_upper]
+
+        # ── 使用說明 ──────────────────────────────────
+        if raw in ["使用說明", "說明", "help", "Help", "?", "？"]:
+            reply("\n".join([
+                "📖 料號ERP BOT 使用說明",
+                "─" * 22,
+                "【查詢】",
+                "查 料號",
+                "查庫存 料號",
+                "查承認 料號",
+                "查下單 料號",
+                "查交期 料號",
+                "",
+                "【庫存操作】",
+                "入庫 料號 數量",
+                "出庫 料號 數量",
+                "我要增加庫存 → 對話式入庫",
+                "",
+                "【採購】",
+                "下單 料號 廠商 數量 交期",
+                "例：下單 PN001 台灣製造 100 2026-07-01",
+                "到貨 PO單號或料號 數量",
+                "我要下單 → 對話式下單",
+                "─" * 22,
+                "傳「使用說明」可再次查看",
+            ]))
+            return
 
         # ── 對話式流程 ────────────────────────────────
         if raw == "我要增加庫存":
@@ -299,10 +437,14 @@ def webhook_erp():
     for event in events:
         if event.get("type") != "message":
             continue
-        if event["message"].get("type") != "text":
-            continue
-        user_id = event.get("source", {}).get("userId", "")
-        handle_erp(event["message"]["text"], event["replyToken"], user_id)
+        msg_type    = event["message"].get("type")
+        user_id     = event.get("source", {}).get("userId", "")
+        reply_token = event["replyToken"]
+
+        if msg_type == "image":
+            handle_invoice_image(user_id, event["message"]["id"], reply_token)
+        elif msg_type == "text":
+            handle_erp(event["message"]["text"], reply_token, user_id)
     return "OK"
 
 
