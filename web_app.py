@@ -66,11 +66,16 @@ def _get_expense_sheet():
         from pdf_analyzer import _get_creds
         import gspread as _gs
         _expense_sh = _gs.authorize(_get_creds()).open_by_key(EXPENSE_SHEET_ID)
-        existing = [ws.title for ws in _expense_sh.worksheets()]
-        if "請款" not in existing:
-            ws = _expense_sh.add_worksheet(title="請款", rows=1000, cols=17)
-            ws.update("A1:Q1", [EXPENSE_HEADERS])
     return _expense_sh
+
+
+def _get_user_tab(requester: str):
+    sh       = _get_expense_sheet()
+    existing = [ws.title for ws in sh.worksheets()]
+    if requester not in existing:
+        ws = sh.add_worksheet(title=requester, rows=1000, cols=17)
+        ws.update("A1:Q1", [EXPENSE_HEADERS])
+    return sh.worksheet(requester)
 
 
 def _upload_to_drive(image_bytes: bytes, filename: str) -> str:
@@ -162,8 +167,8 @@ def handle_invoice_image(user_id: str, message_id: str, reply_token: str):
         row[col_idx] = data.get("amount", "")
         row[16] = image_formula  # 發票圖片 =IMAGE(url)
 
-        sh = _get_expense_sheet()
-        sh.worksheet("請款").append_row(row, value_input_option="USER_ENTERED")
+        ws = _get_user_tab(requester)
+        ws.append_row(row, value_input_option="USER_ENTERED")
 
         _line_reply(reply_token, (
             f"✅ 發票已記錄\n"
