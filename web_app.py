@@ -75,6 +75,14 @@ def _get_user_tab(requester: str):
     if requester not in existing:
         ws = sh.add_worksheet(title=requester, rows=1000, cols=17)
         ws.update("A1:Q1", [EXPENSE_HEADERS])
+        ws.format("A1:Q1", {
+            "backgroundColor": {"red": 0.18, "green": 0.38, "blue": 0.65},
+            "textFormat": {
+                "foregroundColor": {"red": 1.0, "green": 1.0, "blue": 1.0},
+                "bold": True,
+            },
+            "horizontalAlignment": "CENTER",
+        })
     return sh.worksheet(requester)
 
 
@@ -150,7 +158,6 @@ def handle_invoice_image(user_id: str, message_id: str, reply_token: str):
         image_bytes = img_resp.content
         data        = _analyze_invoice(image_bytes)
         requester   = _get_line_display_name(user_id)
-        print(f"[INVOICE] requester={requester!r} user_id={user_id!r}", flush=True)
         expense_col = data.get("expense_col", "")
         if expense_col not in EXPENSE_COLS:
             expense_col = EXPENSE_COLS[0]
