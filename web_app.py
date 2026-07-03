@@ -54,7 +54,7 @@ _erp_states: dict = {}  # { user_id: {"action": "入庫"/"下單"} }
 EXPENSE_SHEET_ID = "1yf62_kTCfEPt0hYg5IoGsW7_EDddGG2Ft5yiisqLPhM"
 EXPENSE_HEADERS  = ["摘要", "項目", "發票號碼", "請款人", "日期",
                     "研發相關", "加油費", "交通費", "房租", "行銷",
-                    "郵寄費", "旅費", "餐費", "工程", "辦公室補給", "備註"]
+                    "郵寄費", "旅費", "餐費", "工程", "辦公室補給", "備註", "發票圖片"]
 EXPENSE_COLS     = ["研發相關", "加油費", "交通費", "房租", "行銷",
                     "郵寄費", "旅費", "餐費", "工程", "辦公室補給"]
 _expense_sh      = None
@@ -68,9 +68,35 @@ def _get_expense_sheet():
         _expense_sh = _gs.authorize(_get_creds()).open_by_key(EXPENSE_SHEET_ID)
         existing = [ws.title for ws in _expense_sh.worksheets()]
         if "請款" not in existing:
-            ws = _expense_sh.add_worksheet(title="請款", rows=1000, cols=16)
-            ws.update("A1:P1", [EXPENSE_HEADERS])
+            ws = _expense_sh.add_worksheet(title="請款", rows=1000, cols=17)
+            ws.update("A1:Q1", [EXPENSE_HEADERS])
     return _expense_sh
+
+
+def _upload_to_drive(image_bytes: bytes, filename: str) -> str:
+    """上傳圖片到 Google Drive，設為公開連結，回傳 =IMAGE() 公式字串"""
+    import io
+    from pdf_analyzer import _get_creds
+    from googleapiclient.discovery import build
+    from googleapiclient.http import MediaIoBaseUpload
+
+    creds   = _get_creds()
+    service = build("drive", "v3", credentials=creds)
+
+    file_metadata = {"name": filename}
+    media    = MediaIoBaseUpload(io.BytesIO(image_bytes), mimetype="image/jpeg")
+    uploaded = service.files().create(
+        body=file_metadata, media_body=media, fields="id"
+    ).execute()
+    file_id = uploaded.get("id")
+
+    service.permissions().create(
+        fileId=file_id,
+        body={"type": "anyone", "role": "reader"},
+    ).execute()
+
+    url = f"https://drive.google.com/uc?id={file_id}"
+    return f'=IMAGE("{url}")'
 
 
 def _get_line_display_name(user_id: str) -> str:
@@ -127,13 +153,17 @@ def handle_invoice_image(user_id: str, message_id: str, reply_token: str):
             _line_reply(reply_token, "⚠️ 無法取得圖片，請重試。")
             return
 
-        data        = _analyze_invoice(img_resp.content)
+        image_bytes = img_resp.content
+        data        = _analyze_invoice(image_bytes)
         requester   = _get_line_display_name(user_id)
         expense_col = data.get("expense_col", "")
         if expense_col not in EXPENSE_COLS:
             expense_col = EXPENSE_COLS[0]
 
-        row = [""] * 16
+        filename    = f"invoice_{datetime.now(_TW).strftime('%Y%m%d_%H%M%S')}_{user_id[:6]}.jpg"
+        image_formula = _upload_to_drive(image_bytes, filename)
+
+        row = [""] * 17
         row[0]  = data.get("summary", "")
         row[1]  = data.get("items", "")
         row[2]  = data.get("invoice_number", "")
@@ -141,9 +171,10 @@ def handle_invoice_image(user_id: str, message_id: str, reply_token: str):
         row[4]  = data.get("date", datetime.now(_TW).strftime("%Y-%m-%d"))
         col_idx = EXPENSE_HEADERS.index(expense_col)
         row[col_idx] = data.get("amount", "")
+        row[16] = image_formula  # 發票圖片 =IMAGE(url)
 
         sh = _get_expense_sheet()
-        sh.worksheet("請款").append_row(row)
+        sh.worksheet("請款").append_row(row, value_input_option="USER_ENTERED")
 
         _line_reply(reply_token, (
             f"✅ 發票已記錄\n"
@@ -153,7 +184,8 @@ def handle_invoice_image(user_id: str, message_id: str, reply_token: str):
             f"發票號：{row[2] or '─'}\n"
             f"品　項：{row[1]}\n"
             f"金　額：NT$ {data.get('amount', '─')}\n"
-            f"類　別：{expense_col}"
+            f"類　別：{expense_col}\n"
+            f"圖　片：已同步至 Sheet"
         ))
 
     except Exception as e:

@@ -3,5 +3,6 @@ gunicorn
 gspread
 google-auth
 google-genai
+google-api-python-client
 pymupdf
 requests
