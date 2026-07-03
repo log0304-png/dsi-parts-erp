@@ -74,28 +74,17 @@ def _get_expense_sheet():
 
 
 def _upload_to_drive(image_bytes: bytes, filename: str) -> str:
-    """上傳圖片到 Google Drive，設為公開連結，回傳 =IMAGE() 公式字串"""
-    import io
-    from pdf_analyzer import _get_creds
-    from googleapiclient.discovery import build
-    from googleapiclient.http import MediaIoBaseUpload
-
-    creds   = _get_creds()
-    service = build("drive", "v3", credentials=creds)
-
-    file_metadata = {"name": filename, "parents": ["1Xquy4XD3si2YgQhN9kOq6xbuWuJkNIhQ"]}
-    media    = MediaIoBaseUpload(io.BytesIO(image_bytes), mimetype="image/jpeg")
-    uploaded = service.files().create(
-        body=file_metadata, media_body=media, fields="id"
-    ).execute()
-    file_id = uploaded.get("id")
-
-    service.permissions().create(
-        fileId=file_id,
-        body={"type": "anyone", "role": "reader"},
-    ).execute()
-
-    url = f"https://drive.google.com/uc?id={file_id}"
+    """上傳圖片到 ImgBB，回傳 =IMAGE() 公式字串"""
+    import base64
+    key  = os.environ.get("IMGBB_API_KEY", "2121c99497653d5d8b41486ed00aeb42")
+    b64  = base64.b64encode(image_bytes).decode("utf-8")
+    resp = requests.post(
+        "https://api.imgbb.com/1/upload",
+        data={"key": key, "image": b64, "name": filename},
+        timeout=30,
+    )
+    resp.raise_for_status()
+    url = resp.json()["data"]["url"]
     return f'=IMAGE("{url}")'
 
 
