@@ -150,6 +150,7 @@ def handle_invoice_image(user_id: str, message_id: str, reply_token: str):
         image_bytes = img_resp.content
         data        = _analyze_invoice(image_bytes)
         requester   = _get_line_display_name(user_id)
+        print(f"[INVOICE] requester={requester!r} user_id={user_id!r}", flush=True)
         expense_col = data.get("expense_col", "")
         if expense_col not in EXPENSE_COLS:
             expense_col = EXPENSE_COLS[0]
