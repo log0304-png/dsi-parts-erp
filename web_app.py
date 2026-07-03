@@ -83,7 +83,7 @@ def _upload_to_drive(image_bytes: bytes, filename: str) -> str:
     creds   = _get_creds()
     service = build("drive", "v3", credentials=creds)
 
-    file_metadata = {"name": filename}
+    file_metadata = {"name": filename, "parents": ["1Xquy4XD3si2YgQhN9kOq6xbuWuJkNIhQ"]}
     media    = MediaIoBaseUpload(io.BytesIO(image_bytes), mimetype="image/jpeg")
     uploaded = service.files().create(
         body=file_metadata, media_body=media, fields="id"
