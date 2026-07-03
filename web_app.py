@@ -98,7 +98,7 @@ def _upload_to_drive(image_bytes: bytes, filename: str) -> str:
     )
     resp.raise_for_status()
     url = resp.json()["data"]["url"]
-    return f'=IMAGE("{url}")'
+    return f'=HYPERLINK("{url}","📷 查看發票")'
 
 
 def _get_line_display_name(user_id: str) -> str:
