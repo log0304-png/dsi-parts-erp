@@ -132,7 +132,7 @@ def _analyze_invoice(image_bytes: bytes) -> dict:
     )
     image_part = _gt.Part.from_bytes(data=image_bytes, mime_type="image/jpeg")
     resp = client.models.generate_content(
-        model="gemini-2.0-flash",
+        model="gemini-2.0-flash-lite",
         contents=[prompt, image_part],
         config=_gt.GenerateContentConfig(
             response_mime_type="application/json",
